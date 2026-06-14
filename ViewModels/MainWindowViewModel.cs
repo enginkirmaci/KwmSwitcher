@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KwmSwitcher.Models;
@@ -36,13 +37,19 @@ public partial class MainWindowViewModel : ViewModelBase
 
         _engine.LocalActiveChanged += active =>
         {
-            IsLocalActive = active;
-            ActiveLabel = active ? "Local (this machine)" : "Remote (other machine)";
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsLocalActive = active;
+                ActiveLabel = active ? "Local (this machine)" : "Remote (other machine)";
+            });
         };
 
         _engine.StatusChanged += status =>
         {
-            StatusText = status;
+            Dispatcher.UIThread.Post(() =>
+            {
+                StatusText = status;
+            });
         };
     }
 

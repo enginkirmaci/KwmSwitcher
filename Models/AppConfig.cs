@@ -34,7 +34,10 @@ public class AppConfig
         try
         {
             var json = File.ReadAllText(ConfigPath);
-            return JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
+            var config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
+            // Ensure TrackedDeviceKeys is never null (JSON deserialization can set it to null)
+            config.TrackedDeviceKeys ??= [];
+            return config;
         }
         catch
         {
