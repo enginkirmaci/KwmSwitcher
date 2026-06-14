@@ -37,7 +37,7 @@ public partial class App : Application
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 _usbMonitor = new LinuxUsbMonitor();
-                _monitorSwitcher = new LinuxMonitorSwitcher();
+                _monitorSwitcher = new LinuxMonitorSwitcher(_config);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {

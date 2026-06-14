@@ -1,18 +1,35 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using KwmSwitcher.Models;
 
 namespace KwmSwitcher.Services.Linux;
 
 public class LinuxMonitorSwitcher : IMonitorSwitcher
 {
+    private readonly AppConfig _config;
+
+    public LinuxMonitorSwitcher(AppConfig config)
+    {
+        _config = config;
+    }
+
     public async Task<bool> SetInputSourceAsync(byte inputSource)
     {
         try
         {
-            var result = await RunDdcutilAsync(
-                $"setvcp 0x{Models.MonitorInputSource.VcpCode:X2} 0x{inputSource:X2}");
-            return result;
+            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
+            var value = MonitorInputSource.GetProtocolValue(_config.InputProtocol, inputSource);
+            var args = _config.InputProtocol == InputSwitchProtocol.Lg
+                ? $"--i2c-source-addr=0x50 setvcp 0x{vcpCode:X2} 0x{value:X2} --noverify"
+                : $"setvcp 0x{vcpCode:X2} 0x{value:X2}";
+
+            var (success, stderr) = await RunDdcutilAsync(args);
+            if (!success && !string.IsNullOrWhiteSpace(stderr))
+            {
+                Console.Error.WriteLine($"ddcutil setvcp failed: {stderr.Trim()}");
+            }
+            return success;
         }
         catch (Exception ex)
         {
@@ -56,7 +73,7 @@ public class LinuxMonitorSwitcher : IMonitorSwitcher
         }
     }
 
-    private static async Task<bool> RunDdcutilAsync(string arguments)
+    private static async Task<(bool Success, string Stderr)> RunDdcutilAsync(string arguments)
     {
         var psi = new ProcessStartInfo("ddcutil", arguments)
         {
@@ -68,9 +85,12 @@ public class LinuxMonitorSwitcher : IMonitorSwitcher
 
         using var process = Process.Start(psi);
         if (process == null)
-            return false;
+            return (false, "Failed to start ddcutil process");
 
+        var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
-        return process.ExitCode == 0;
+        var stderr = await stderrTask;
+
+        return (process.ExitCode == 0, stderr);
     }
 }

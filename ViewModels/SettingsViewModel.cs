@@ -18,14 +18,17 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<UsbDeviceItem> _availableDevices = [];
 
-    public ObservableCollection<InputSourceOption> InputSources { get; } =
+    public ObservableCollection<InputProtocolOption> InputProtocols { get; } =
     [
-        new(MonitorInputSource.DisplayPort, "DisplayPort"),
-        new(MonitorInputSource.Hdmi1, "HDMI-1"),
-        new(MonitorInputSource.Hdmi2, "HDMI-2"),
-        new(MonitorInputSource.Dvi, "DVI"),
-        new(MonitorInputSource.Vga, "VGA"),
+        new(InputSwitchProtocol.Standard, "Standard DDC/CI (0x60)"),
+        new(InputSwitchProtocol.Lg, "LG (0xF4)"),
     ];
+
+    [ObservableProperty]
+    private InputProtocolOption _selectedInputProtocol;
+
+    [ObservableProperty]
+    private ObservableCollection<InputSourceOption> _inputSources = [];
 
     [ObservableProperty]
     private InputSourceOption _selectedLocalInput;
@@ -36,16 +39,56 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _startMinimized;
 
+    partial void OnSelectedInputProtocolChanged(InputProtocolOption value)
+    {
+        UpdateInputSources(value.Protocol);
+    }
+
     public SettingsViewModel(IUsbMonitor usbMonitor, AppConfig config)
     {
         _usbMonitor = usbMonitor;
         _config = config;
 
-        SelectedLocalInput = InputSources.First(i => i.Code == _config.LocalInputSource);
-        SelectedRemoteInput = InputSources.First(i => i.Code == _config.RemoteInputSource);
+        SelectedInputProtocol = InputProtocols.First(p => p.Protocol == _config.InputProtocol);
+        UpdateInputSources(_config.InputProtocol);
+
+        SelectedLocalInput = InputSources.FirstOrDefault(i => i.Code == _config.LocalInputSource)
+                             ?? InputSources.First();
+        SelectedRemoteInput = InputSources.FirstOrDefault(i => i.Code == _config.RemoteInputSource)
+                              ?? InputSources.Skip(1).FirstOrDefault()
+                              ?? InputSources.First();
         StartMinimized = _config.StartMinimized;
 
         RefreshDevices();
+    }
+
+    private void UpdateInputSources(InputSwitchProtocol protocol)
+    {
+        InputSources = protocol switch
+        {
+            InputSwitchProtocol.Lg => new ObservableCollection<InputSourceOption>(
+            [
+                new(MonitorInputSource.DisplayPort, "DisplayPort"),
+                new(MonitorInputSource.UsbC, "USB-C"),
+                new(MonitorInputSource.Hdmi1, "HDMI-1"),
+                new(MonitorInputSource.Hdmi2, "HDMI-2"),
+            ]),
+            _ => new ObservableCollection<InputSourceOption>(
+            [
+                new(MonitorInputSource.DisplayPort, "DisplayPort"),
+                new(MonitorInputSource.Hdmi1, "HDMI-1"),
+                new(MonitorInputSource.Hdmi2, "HDMI-2"),
+                new(MonitorInputSource.Dvi, "DVI"),
+                new(MonitorInputSource.Vga, "VGA"),
+            ])
+        };
+
+        // Ensure selections are valid for the new source list.
+        SelectedLocalInput = InputSources.FirstOrDefault(i => i.Code == _config.LocalInputSource)
+                             ?? InputSources.First();
+        SelectedRemoteInput = InputSources.FirstOrDefault(i => i.Code == _config.RemoteInputSource)
+                              ?? InputSources.Skip(1).FirstOrDefault()
+                              ?? InputSources.First();
     }
 
     [RelayCommand]
@@ -64,6 +107,7 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void Save()
     {
+        _config.InputProtocol = SelectedInputProtocol.Protocol;
         _config.LocalInputSource = SelectedLocalInput.Code;
         _config.RemoteInputSource = SelectedRemoteInput.Code;
         _config.StartMinimized = StartMinimized;
@@ -77,6 +121,7 @@ public partial class SettingsViewModel : ViewModelBase
 }
 
 public record InputSourceOption(byte Code, string Name);
+public record InputProtocolOption(InputSwitchProtocol Protocol, string Name);
 
 public partial class UsbDeviceItem : ViewModelBase
 {
