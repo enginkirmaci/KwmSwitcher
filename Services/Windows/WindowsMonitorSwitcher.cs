@@ -52,53 +52,6 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
         public string szPhysicalMonitorDescription;
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool EnumDisplayDevices(
-        string? lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-
-    private const uint EDS_ATTACHEDTO_DESKTOP = 0x1;
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct DISPLAY_DEVICE
-    {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceString;
-        public uint StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceKey;
-    }
-
-    private const uint DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1;
-    private const uint DISPLAY_DEVICE_ACTIVE = 0x80000000;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MONITORINFOEX
-    {
-        public int Size;
-        public RECT Monitor;
-        public RECT WorkArea;
-        public uint Flags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string DeviceName;
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpMonitorInfo);
-
     [DllImport("user32.dll")]
     private static extern int EnumDisplayMonitors(
         IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
@@ -108,20 +61,13 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
 
     public static IReadOnlyList<string> GetAvailableMonitorDescriptions()
     {
-        var descriptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var descriptions = new List<string>();
 
         foreach (var monitorHandle in GetDisplayMonitorHandles())
         {
             var monitors = GetPhysicalMonitors(monitorHandle);
             if (monitors == null)
-            {
-                var error = Marshal.GetLastWin32Error();
-                var deviceName = GetMonitorDeviceName(monitorHandle);
-                Console.Error.WriteLine(
-                    $"GetPhysicalMonitorsFromHMONITOR failed for {deviceName} (error {error})");
-
                 continue;
-            }
 
             try
             {
@@ -140,41 +86,48 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             }
         }
 
-        foreach (var desc in GetMonitorDescriptionsFromDisplayDevices())
-        {
-            descriptions.Add(desc);
-        }
-
-        return descriptions.ToList();
+        return descriptions;
     }
 
     public async Task<bool> SetInputSourceAsync(byte inputSource)
     {
         return await Task.Run(() =>
-            ForEachTargetMonitor(monitor =>
-                SetVCPFeature(monitor.hPhysicalMonitor, MonitorInputSource.VcpCode, inputSource)));
+        {
+            foreach (var monitor in EnumerateTargetMonitors())
+            {
+                if (SetVCPFeature(
+                    monitor.hPhysicalMonitor,
+                    MonitorInputSource.VcpCode,
+                    inputSource))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        });
     }
 
     public async Task<byte> GetInputSourceAsync()
     {
-        byte result = 0;
-        await Task.Run(() =>
-            ForEachTargetMonitor(monitor =>
+        return await Task.Run(() =>
+        {
+            foreach (var monitor in EnumerateTargetMonitors())
             {
                 if (GetVCPFeatureAndVCPFeatureReply(
-                    monitor.hPhysicalMonitor, MonitorInputSource.VcpCode,
+                    monitor.hPhysicalMonitor,
+                    MonitorInputSource.VcpCode,
                     out _, out var currentValue, out _))
                 {
-                    result = (byte)currentValue;
-                    return true;
+                    return (byte)currentValue;
                 }
+            }
 
-                return false;
-            }));
-        return result;
+            return (byte)0;
+        });
     }
 
-    private bool ForEachTargetMonitor(Func<PHYSICAL_MONITOR, bool> action)
+    private IEnumerable<PHYSICAL_MONITOR> EnumerateTargetMonitors()
     {
         var targetName = _config.TargetMonitorName;
 
@@ -198,8 +151,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                         continue;
                     }
 
-                    if (action(monitor))
-                        return true;
+                    yield return monitor;
                 }
             }
             finally
@@ -207,8 +159,6 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                 DestroyPhysicalMonitors((uint)monitors.Length, monitors);
             }
         }
-
-        return false;
     }
 
     private static IReadOnlyList<IntPtr> GetDisplayMonitorHandles()
@@ -228,14 +178,6 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
         return handles;
     }
 
-    private static string GetMonitorDeviceName(IntPtr hMonitor)
-    {
-        var info = new MONITORINFOEX { Size = Marshal.SizeOf<MONITORINFOEX>() };
-        if (GetMonitorInfo(hMonitor, ref info))
-            return info.DeviceName;
-        return $"hMonitor:{hMonitor}";
-    }
-
     private static PHYSICAL_MONITOR[]? GetPhysicalMonitors(IntPtr hMonitor)
     {
         uint count = 0;
@@ -247,37 +189,5 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             return null;
 
         return monitors;
-    }
-
-    private static IEnumerable<string> GetMonitorDescriptionsFromDisplayDevices()
-    {
-        var descriptions = new List<string>();
-        uint adapterNum = 0;
-
-        var adapter = new DISPLAY_DEVICE { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
-
-        while (EnumDisplayDevices(null, adapterNum, ref adapter, EDS_ATTACHEDTO_DESKTOP))
-        {
-            uint monitorNum = 0;
-            var monitor = new DISPLAY_DEVICE { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
-
-            while (EnumDisplayDevices(adapter.DeviceName, monitorNum, ref monitor, 0))
-            {
-                if ((monitor.StateFlags & DISPLAY_DEVICE_ACTIVE) != 0 &&
-                    (monitor.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0 &&
-                    !string.IsNullOrWhiteSpace(monitor.DeviceString))
-                {
-                    descriptions.Add(monitor.DeviceString);
-                }
-
-                monitor = new DISPLAY_DEVICE { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
-                monitorNum++;
-            }
-
-            adapter = new DISPLAY_DEVICE { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
-            adapterNum++;
-        }
-
-        return descriptions;
     }
 }
