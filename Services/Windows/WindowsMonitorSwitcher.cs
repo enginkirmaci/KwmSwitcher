@@ -93,12 +93,15 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     {
         return await Task.Run(() =>
         {
+            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
+            var value = MonitorInputSource.GetProtocolValue(_config.InputProtocol, inputSource);
+
             foreach (var monitor in EnumerateTargetMonitors())
             {
                 if (SetVCPFeature(
                     monitor.hPhysicalMonitor,
-                    MonitorInputSource.VcpCode,
-                    inputSource))
+                    vcpCode,
+                    value))
                 {
                     return true;
                 }
@@ -112,11 +115,13 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     {
         return await Task.Run(() =>
         {
+            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
+
             foreach (var monitor in EnumerateTargetMonitors())
             {
                 if (GetVCPFeatureAndVCPFeatureReply(
                     monitor.hPhysicalMonitor,
-                    MonitorInputSource.VcpCode,
+                    vcpCode,
                     out _, out var currentValue, out _))
                 {
                     return (byte)currentValue;
