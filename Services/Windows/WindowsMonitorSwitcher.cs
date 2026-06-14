@@ -193,7 +193,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     {
         return await Task.Run(() =>
         {
-            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
+            var vcpCode = MonitorInputSource.VcpCode;
 
             foreach (var device in EnumerateMonitorDevices())
             {
