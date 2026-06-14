@@ -26,7 +26,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
 
     [DllImport("dxva2.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetVCPFeatureAndVCPFeatureReply(
+    private static extern bool SetVCPFeature(
         IntPtr hMonitor, byte bVCPCode, uint dwVCPFeatureValue);
 
     [DllImport("dxva2.dll", SetLastError = true)]
@@ -63,7 +63,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                 if (!GetPhysicalMonitorsFromHMONITOR(monitorHandle, 1, monitors))
                     return false;
 
-                return SetVCPFeatureAndVCPFeatureReply(
+                return SetVCPFeature(
                     monitors[0].hPhysicalMonitor,
                     Models.MonitorInputSource.VcpCode,
                     inputSource);
