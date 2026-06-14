@@ -85,7 +85,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
         public int Bottom;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential)]
     private struct MONITORINFOEX
     {
         public int Size;
@@ -108,20 +108,18 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
 
     public static IReadOnlyList<string> GetAvailableMonitorDescriptions()
     {
-        var descriptions = new List<string>();
-        var hmonHandles = GetDisplayMonitorHandles();
+        var descriptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        Console.Error.WriteLine($"[KwmSwitcher] Enumerating {hmonHandles.Count} display monitor handle(s)");
-
-        foreach (var monitorHandle in hmonHandles)
+        foreach (var monitorHandle in GetDisplayMonitorHandles())
         {
-            var deviceName = GetMonitorDeviceName(monitorHandle);
             var monitors = GetPhysicalMonitors(monitorHandle);
             if (monitors == null)
             {
                 var error = Marshal.GetLastWin32Error();
+                var deviceName = GetMonitorDeviceName(monitorHandle);
                 Console.Error.WriteLine(
-                    $"[KwmSwitcher] GetPhysicalMonitorsFromHMONITOR failed for {deviceName} (error {error})");
+                    $"GetPhysicalMonitorsFromHMONITOR failed for {deviceName} (error {error})");
+
                 continue;
             }
 
@@ -133,8 +131,6 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                         !string.IsNullOrWhiteSpace(monitor.szPhysicalMonitorDescription))
                     {
                         descriptions.Add(monitor.szPhysicalMonitorDescription);
-                        Console.Error.WriteLine(
-                            $"[KwmSwitcher] Found DDC/CI monitor: '{monitor.szPhysicalMonitorDescription}' on {deviceName}");
                     }
                 }
             }
@@ -146,59 +142,47 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
 
         foreach (var desc in GetMonitorDescriptionsFromDisplayDevices())
         {
-            if (!descriptions.Any(d => d.Equals(desc, StringComparison.OrdinalIgnoreCase)))
-            {
-                descriptions.Add(desc);
-                Console.Error.WriteLine(
-                    $"[KwmSwitcher] Found display device (no DDC/CI handle): '{desc}'");
-            }
+            descriptions.Add(desc);
         }
 
-        Console.Error.WriteLine($"[KwmSwitcher] Total {descriptions.Count} monitor(s) available");
-        return descriptions;
+        return descriptions.ToList();
     }
 
     public async Task<bool> SetInputSourceAsync(byte inputSource)
     {
-        return await Task.Run(() => ForEachTargetMonitor(monitor =>
-            SetVCPFeature(monitor.hPhysicalMonitor, MonitorInputSource.VcpCode, inputSource)));
+        return await Task.Run(() =>
+            ForEachTargetMonitor(monitor =>
+                SetVCPFeature(monitor.hPhysicalMonitor, MonitorInputSource.VcpCode, inputSource)));
     }
 
     public async Task<byte> GetInputSourceAsync()
     {
         byte result = 0;
-        await Task.Run(() => ForEachTargetMonitor(monitor =>
-        {
-            if (GetVCPFeatureAndVCPFeatureReply(
-                monitor.hPhysicalMonitor, MonitorInputSource.VcpCode,
-                out _, out var currentValue, out _))
+        await Task.Run(() =>
+            ForEachTargetMonitor(monitor =>
             {
-                result = (byte)currentValue;
-                return true;
-            }
+                if (GetVCPFeatureAndVCPFeatureReply(
+                    monitor.hPhysicalMonitor, MonitorInputSource.VcpCode,
+                    out _, out var currentValue, out _))
+                {
+                    result = (byte)currentValue;
+                    return true;
+                }
 
-            return false;
-        }));
+                return false;
+            }));
         return result;
     }
 
     private bool ForEachTargetMonitor(Func<PHYSICAL_MONITOR, bool> action)
     {
         var targetName = _config.TargetMonitorName;
-        var allMonitors = new List<(IntPtr Handle, string Description, PHYSICAL_MONITOR Monitor)>();
 
         foreach (var monitorHandle in GetDisplayMonitorHandles())
         {
-            var deviceName = GetMonitorDeviceName(monitorHandle);
             var monitors = GetPhysicalMonitors(monitorHandle);
             if (monitors == null)
-            {
-                var error = Marshal.GetLastWin32Error();
-                Console.Error.WriteLine(
-                    $"[KwmSwitcher] GetPhysicalMonitorsFromHMONITOR failed for {deviceName} (error {error}). " +
-                    "If this is an external monitor on a laptop, try forcing the discrete GPU.");
                 continue;
-            }
 
             try
             {
@@ -207,7 +191,15 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                     if (monitor.hPhysicalMonitor == IntPtr.Zero)
                         continue;
 
-                    allMonitors.Add((monitorHandle, monitor.szPhysicalMonitorDescription ?? "", monitor));
+                    if (!string.IsNullOrWhiteSpace(targetName) &&
+                        monitor.szPhysicalMonitorDescription != null &&
+                        !monitor.szPhysicalMonitorDescription.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (action(monitor))
+                        return true;
                 }
             }
             finally
@@ -216,28 +208,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             }
         }
 
-        Console.Error.WriteLine($"[KwmSwitcher] Found {allMonitors.Count} physical monitor(s) with DDC/CI handles");
-        Console.Error.WriteLine($"[KwmSwitcher] Target monitor name: '{targetName ?? "(any)"}'");
-
-        if (!string.IsNullOrWhiteSpace(targetName))
-        {
-            var matched = allMonitors.Where(m =>
-                m.Description.Contains(targetName, StringComparison.OrdinalIgnoreCase)).ToList();
-
-            if (matched.Count > 0)
-            {
-                Console.Error.WriteLine(
-                    $"[KwmSwitcher] {matched.Count} monitor(s) matched target '{targetName}'");
-                return matched.Any(m => action(m.Monitor));
-            }
-
-            Console.Error.WriteLine(
-                $"[KwmSwitcher] No monitor matched target '{targetName}'. " +
-                $"Available: {string.Join(", ", allMonitors.Select(m => $"'{m.Description}'"))}. " +
-                "Falling back to trying all monitors.");
-        }
-
-        return allMonitors.Any(m => action(m.Monitor));
+        return false;
     }
 
     private static IReadOnlyList<IntPtr> GetDisplayMonitorHandles()
@@ -268,28 +239,12 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     private static PHYSICAL_MONITOR[]? GetPhysicalMonitors(IntPtr hMonitor)
     {
         uint count = 0;
-        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref count))
-        {
-            var error = Marshal.GetLastWin32Error();
-            Console.Error.WriteLine(
-                $"[KwmSwitcher] GetNumberOfPhysicalMonitorsFromHMONITOR failed (error {error})");
+        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref count) || count == 0)
             return null;
-        }
-
-        if (count == 0)
-        {
-            Console.Error.WriteLine("[KwmSwitcher] GetNumberOfPhysicalMonitorsFromHMONITOR returned 0 monitors");
-            return null;
-        }
 
         var monitors = new PHYSICAL_MONITOR[count];
         if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, count, monitors))
-        {
-            var error = Marshal.GetLastWin32Error();
-            Console.Error.WriteLine(
-                $"[KwmSwitcher] GetPhysicalMonitorsFromHMONITOR failed for {count} monitor(s) (error {error})");
             return null;
-        }
 
         return monitors;
     }
