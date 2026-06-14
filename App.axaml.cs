@@ -13,6 +13,7 @@ using KwmSwitcher.Services.Linux;
 using KwmSwitcher.Services.Windows;
 using KwmSwitcher.ViewModels;
 using KwmSwitcher.Views;
+using Serilog;
 
 namespace KwmSwitcher;
 
@@ -92,15 +93,15 @@ public partial class App : Application
         var switchLocalItem = new NativeMenuItem("Switch to Local");
         switchLocalItem.Click += async (_, _) =>
         {
-            if (_engine != null)
-                await _engine.SwitchToLocalAsync();
+            try { if (_engine != null) await _engine.SwitchToLocalAsync(); }
+            catch (Exception ex) { Log.Error(ex, "Error switching to local from tray"); }
         };
 
         var switchRemoteItem = new NativeMenuItem("Switch to Remote");
         switchRemoteItem.Click += async (_, _) =>
         {
-            if (_engine != null)
-                await _engine.SwitchToRemoteAsync();
+            try { if (_engine != null) await _engine.SwitchToRemoteAsync(); }
+            catch (Exception ex) { Log.Error(ex, "Error switching to remote from tray"); }
         };
 
         var quitItem = new NativeMenuItem("Quit");
@@ -111,16 +112,14 @@ public partial class App : Application
             desktop.Shutdown();
         };
 
-        var menu = new NativeMenu
-        {
-            showItem,
-            settingsItem,
-            new NativeMenuItemSeparator(),
-            switchLocalItem,
-            switchRemoteItem,
-            new NativeMenuItemSeparator(),
-            quitItem,
-        };
+        var menu = new NativeMenu();
+        menu.Items.Add(showItem);
+        menu.Items.Add(settingsItem);
+        menu.Items.Add(new NativeMenuItemSeparator());
+        menu.Items.Add(switchLocalItem);
+        menu.Items.Add(switchRemoteItem);
+        menu.Items.Add(new NativeMenuItemSeparator());
+        menu.Items.Add(quitItem);
 
         var trayIcon = new TrayIcon
         {

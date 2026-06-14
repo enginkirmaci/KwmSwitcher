@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using KwmSwitcher.Models;
+using Serilog;
 
 namespace KwmSwitcher.Services.Linux;
 
@@ -27,12 +28,14 @@ public class LinuxMonitorSwitcher : IMonitorSwitcher
             var (success, stderr) = await RunDdcutilAsync(args);
             if (!success && !string.IsNullOrWhiteSpace(stderr))
             {
+                Log.Warning("ddcutil setvcp failed: {Stderr}", stderr.Trim());
                 Console.Error.WriteLine($"ddcutil setvcp failed: {stderr.Trim()}");
             }
             return success;
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Failed to set input source");
             Console.Error.WriteLine($"Failed to set input source: {ex.Message}");
             return false;
         }
@@ -68,6 +71,7 @@ public class LinuxMonitorSwitcher : IMonitorSwitcher
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Failed to get input source");
             Console.Error.WriteLine($"Failed to get input source: {ex.Message}");
             return 0;
         }

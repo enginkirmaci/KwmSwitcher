@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using KwmSwitcher.Models;
+using Serilog;
 
 namespace KwmSwitcher.Services.Linux;
 
@@ -54,8 +55,9 @@ public class LinuxUsbMonitor : IUsbMonitor
 
                 devices.Add(new UsbDeviceInfo(vendorId, productId, description));
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warning(ex, "Failed to read USB device info from {Path}", dir);
             }
         }
 
@@ -64,13 +66,20 @@ public class LinuxUsbMonitor : IUsbMonitor
 
     private void Poll(object? state)
     {
-        var current = GetCurrentDevices();
-        var currentKeys = current.Select(d => d.Key).ToHashSet();
-
-        if (!currentKeys.SetEquals(_lastDeviceKeys))
+        try
         {
-            _lastDeviceKeys = currentKeys;
-            DevicesChanged?.Invoke(current);
+            var current = GetCurrentDevices();
+            var currentKeys = current.Select(d => d.Key).ToHashSet();
+
+            if (!currentKeys.SetEquals(_lastDeviceKeys))
+            {
+                _lastDeviceKeys = currentKeys;
+                DevicesChanged?.Invoke(current);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error in USB poll callback");
         }
     }
 

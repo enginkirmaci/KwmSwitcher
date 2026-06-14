@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading;
 using KwmSwitcher.Models;
+using Serilog;
 
 namespace KwmSwitcher.Services.Windows;
 
@@ -85,6 +86,7 @@ public class WindowsUsbMonitor : IUsbMonitor
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Failed to enumerate USB devices");
             Console.Error.WriteLine($"Failed to enumerate USB devices: {ex.Message}");
         }
 
@@ -96,13 +98,20 @@ public class WindowsUsbMonitor : IUsbMonitor
         _debounceTimer?.Dispose();
         _debounceTimer = new Timer(_ =>
         {
-            var current = GetCurrentDevices();
-            var currentKeys = current.Select(d => d.Key).ToHashSet();
-
-            if (!currentKeys.SetEquals(_lastDeviceKeys))
+            try
             {
-                _lastDeviceKeys = currentKeys;
-                DevicesChanged?.Invoke(current);
+                var current = GetCurrentDevices();
+                var currentKeys = current.Select(d => d.Key).ToHashSet();
+
+                if (!currentKeys.SetEquals(_lastDeviceKeys))
+                {
+                    _lastDeviceKeys = currentKeys;
+                    DevicesChanged?.Invoke(current);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error in USB device event debounce callback");
             }
         }, null, 500, Timeout.Infinite);
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using Serilog;
 
 namespace KwmSwitcher.Models;
 
@@ -39,8 +40,9 @@ public class AppConfig
             config.TrackedDeviceKeys ??= [];
             return config;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Error(ex, "Failed to load config from {Path}", ConfigPath);
             return new AppConfig();
         }
     }

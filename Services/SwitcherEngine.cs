@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using KwmSwitcher.Models;
+using Serilog;
 
 namespace KwmSwitcher.Services;
 
@@ -72,6 +73,7 @@ public class SwitcherEngine : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Error switching to local");
             StatusChanged?.Invoke($"Error switching to local: {ex.Message}");
         }
         finally
@@ -109,6 +111,7 @@ public class SwitcherEngine : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Error switching to remote");
             StatusChanged?.Invoke($"Error switching to remote: {ex.Message}");
         }
         finally
@@ -119,7 +122,14 @@ public class SwitcherEngine : IDisposable
 
     private void OnDevicesChanged(IEnumerable<UsbDeviceInfo> devices)
     {
-        EvaluateState(devices);
+        try
+        {
+            EvaluateState(devices);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error in OnDevicesChanged");
+        }
     }
 
     private void InitState(IEnumerable<UsbDeviceInfo> devices)
@@ -166,11 +176,11 @@ public class SwitcherEngine : IDisposable
 
         if (anyTrackedPresent && !_localActive)
         {
-            _ = SwitchToLocalAsync();
+            _ = SafeSwitchToLocalAsync();
         }
         else if (!anyTrackedPresent && _localActive)
         {
-            _ = SwitchToRemoteAsync();
+            _ = SafeSwitchToRemoteAsync();
         }
         else
         {
@@ -184,5 +194,29 @@ public class SwitcherEngine : IDisposable
     {
         Stop();
         _switchLock.Dispose();
+    }
+
+    private async Task SafeSwitchToLocalAsync()
+    {
+        try
+        {
+            await SwitchToLocalAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Unhandled error in SafeSwitchToLocalAsync");
+        }
+    }
+
+    private async Task SafeSwitchToRemoteAsync()
+    {
+        try
+        {
+            await SwitchToRemoteAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Unhandled error in SafeSwitchToRemoteAsync");
+        }
     }
 }
