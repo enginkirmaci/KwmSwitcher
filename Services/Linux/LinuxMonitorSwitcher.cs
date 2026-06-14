@@ -42,7 +42,8 @@ public class LinuxMonitorSwitcher : IMonitorSwitcher
     {
         try
         {
-            var psi = new ProcessStartInfo("ddcutil", $"getvcp 0x{Models.MonitorInputSource.VcpCode:X2}")
+            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
+            var psi = new ProcessStartInfo("ddcutil", $"getvcp 0x{vcpCode:X2}")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
