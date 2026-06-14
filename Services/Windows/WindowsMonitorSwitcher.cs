@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
@@ -53,26 +54,35 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     {
         return await Task.Run(() =>
         {
-            var monitorHandle = GetPrimaryMonitorHandle();
-            if (monitorHandle == IntPtr.Zero)
-                return false;
-
-            var monitors = new PHYSICAL_MONITOR[1];
-            try
+            foreach (var monitorHandle in GetDisplayMonitorHandles())
             {
-                if (!GetPhysicalMonitorsFromHMONITOR(monitorHandle, 1, monitors))
-                    return false;
+                var monitors = GetPhysicalMonitors(monitorHandle);
+                if (monitors == null)
+                    continue;
 
-                return SetVCPFeature(
-                    monitors[0].hPhysicalMonitor,
-                    Models.MonitorInputSource.VcpCode,
-                    inputSource);
+                try
+                {
+                    foreach (var monitor in monitors)
+                    {
+                        if (monitor.hPhysicalMonitor == IntPtr.Zero)
+                            continue;
+
+                        if (SetVCPFeature(
+                            monitor.hPhysicalMonitor,
+                            Models.MonitorInputSource.VcpCode,
+                            inputSource))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                finally
+                {
+                    DestroyPhysicalMonitors((uint)monitors.Length, monitors);
+                }
             }
-            finally
-            {
-                if (monitors[0].hPhysicalMonitor != IntPtr.Zero)
-                    DestroyPhysicalMonitors(1, monitors);
-            }
+
+            return false;
         });
     }
 
@@ -80,44 +90,65 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     {
         return await Task.Run(() =>
         {
-            var monitorHandle = GetPrimaryMonitorHandle();
-            if (monitorHandle == IntPtr.Zero)
-                return (byte)0;
-
-            var monitors = new PHYSICAL_MONITOR[1];
-            try
+            foreach (var monitorHandle in GetDisplayMonitorHandles())
             {
-                if (!GetPhysicalMonitorsFromHMONITOR(monitorHandle, 1, monitors))
-                    return (byte)0;
+                var monitors = GetPhysicalMonitors(monitorHandle);
+                if (monitors == null)
+                    continue;
 
-                if (GetVCPFeatureAndVCPFeatureReply(
-                    monitors[0].hPhysicalMonitor,
-                    Models.MonitorInputSource.VcpCode,
-                    out _, out var currentValue, out _))
+                try
                 {
-                    return (byte)currentValue;
-                }
+                    foreach (var monitor in monitors)
+                    {
+                        if (monitor.hPhysicalMonitor == IntPtr.Zero)
+                            continue;
 
-                return (byte)0;
+                        if (GetVCPFeatureAndVCPFeatureReply(
+                            monitor.hPhysicalMonitor,
+                            Models.MonitorInputSource.VcpCode,
+                            out _, out var currentValue, out _))
+                        {
+                            return (byte)currentValue;
+                        }
+                    }
+                }
+                finally
+                {
+                    DestroyPhysicalMonitors((uint)monitors.Length, monitors);
+                }
             }
-            finally
-            {
-                if (monitors[0].hPhysicalMonitor != IntPtr.Zero)
-                    DestroyPhysicalMonitors(1, monitors);
-            }
+
+            return (byte)0;
         });
     }
 
-    private static IntPtr GetPrimaryMonitorHandle()
+    private static IReadOnlyList<IntPtr> GetDisplayMonitorHandles()
     {
-        var monitorHandle = IntPtr.Zero;
+        var handles = new List<IntPtr>();
 
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (hMon, _, _, _) =>
-        {
-            monitorHandle = hMon;
-            return false;
-        }, IntPtr.Zero);
+        EnumDisplayMonitors(
+            IntPtr.Zero,
+            IntPtr.Zero,
+            (hMonitor, _, _, _) =>
+            {
+                handles.Add(hMonitor);
+                return true;
+            },
+            IntPtr.Zero);
 
-        return monitorHandle;
+        return handles;
+    }
+
+    private static PHYSICAL_MONITOR[]? GetPhysicalMonitors(IntPtr hMonitor)
+    {
+        uint count = 0;
+        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref count) || count == 0)
+            return null;
+
+        var monitors = new PHYSICAL_MONITOR[count];
+        if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, count, monitors))
+            return null;
+
+        return monitors;
     }
 }
