@@ -59,6 +59,12 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     private delegate bool MonitorEnumProc(
         IntPtr hMonitor, IntPtr hdcMonitor, IntPtr lprcMonitor, IntPtr dwData);
 
+    /// <summary>
+    /// Lists every monitor description Windows can identify, and flags any monitor
+    /// for which the physical monitor handle came back NULL (meaning a description
+    /// is available via EDID, but no DDC/CI control session could be opened, so
+    /// SetVCPFeature/GetVCPFeature calls cannot reach that monitor).
+    /// </summary>
     public static IReadOnlyList<string> GetAvailableMonitorDescriptions()
     {
         var descriptions = new List<string>();
@@ -73,10 +79,20 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             {
                 foreach (var monitor in monitors)
                 {
-                    if (monitor.hPhysicalMonitor != IntPtr.Zero &&
-                        !string.IsNullOrWhiteSpace(monitor.szPhysicalMonitorDescription))
+                    if (string.IsNullOrWhiteSpace(monitor.szPhysicalMonitorDescription))
+                        continue;
+
+                    descriptions.Add(monitor.szPhysicalMonitorDescription);
+
+                    if (monitor.hPhysicalMonitor == IntPtr.Zero)
                     {
-                        descriptions.Add(monitor.szPhysicalMonitorDescription);
+                        Console.Error.WriteLine(
+                            $"[diag] '{monitor.szPhysicalMonitorDescription}' was enumerated with a NULL " +
+                            "physical monitor handle. The description came from EDID, but no DDC/CI " +
+                            "control session is available for this monitor, so VCP commands cannot be " +
+                            "sent to it. This is a driver/connection-level issue (e.g. USB-C dock/KVM/MST " +
+                            "hub not passing through the DDC channel, hybrid-GPU routing, or needing to " +
+                            "run elevated) rather than something fixable in this code.");
                     }
                 }
             }
@@ -96,15 +112,29 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
             var value = MonitorInputSource.GetProtocolValue(_config.InputProtocol, inputSource);
 
-            foreach (var monitor in EnumerateTargetMonitors())
+            var found = false;
+
+            foreach (var monitor in EnumerateTargetMonitors(logSkipped: true))
             {
-                if (SetVCPFeature(
-                    monitor.hPhysicalMonitor,
-                    vcpCode,
-                    value))
+                found = true;
+
+                if (SetVCPFeature(monitor.hPhysicalMonitor, vcpCode, value))
                 {
                     return true;
                 }
+
+                var error = Marshal.GetLastWin32Error();
+                Console.Error.WriteLine(
+                    $"[diag] SetVCPFeature failed for '{monitor.szPhysicalMonitorDescription}' " +
+                    $"(VCP 0x{vcpCode:X2} = 0x{value:X2}). Win32 error code: {error}.");
+            }
+
+            if (!found)
+            {
+                Console.Error.WriteLine(
+                    "[diag] No physical monitor with a usable (non-NULL) handle matched the configured " +
+                    "target. Call GetAvailableMonitorDescriptions() to see what Windows detected, including " +
+                    "any monitors with NULL handles.");
             }
 
             return false;
@@ -117,7 +147,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
         {
             var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
 
-            foreach (var monitor in EnumerateTargetMonitors())
+            foreach (var monitor in EnumerateTargetMonitors(logSkipped: true))
             {
                 if (GetVCPFeatureAndVCPFeatureReply(
                     monitor.hPhysicalMonitor,
@@ -126,13 +156,19 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                 {
                     return (byte)currentValue;
                 }
+
+                var error = Marshal.GetLastWin32Error();
+                Console.Error.WriteLine(
+                    $"[diag] GetVCPFeatureAndVCPFeatureReply failed for " +
+                    $"'{monitor.szPhysicalMonitorDescription}' (VCP 0x{vcpCode:X2}). " +
+                    $"Win32 error code: {error}.");
             }
 
             return (byte)0;
         });
     }
 
-    private IEnumerable<PHYSICAL_MONITOR> EnumerateTargetMonitors()
+    private IEnumerable<PHYSICAL_MONITOR> EnumerateTargetMonitors(bool logSkipped = false)
     {
         var targetName = _config.TargetMonitorName;
 
@@ -146,13 +182,21 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             {
                 foreach (var monitor in monitors)
                 {
-                    if (monitor.hPhysicalMonitor == IntPtr.Zero)
-                        continue;
-
                     if (!string.IsNullOrWhiteSpace(targetName) &&
                         monitor.szPhysicalMonitorDescription != null &&
                         !monitor.szPhysicalMonitorDescription.Contains(targetName, StringComparison.OrdinalIgnoreCase))
                     {
+                        continue;
+                    }
+
+                    if (monitor.hPhysicalMonitor == IntPtr.Zero)
+                    {
+                        if (logSkipped)
+                        {
+                            Console.Error.WriteLine(
+                                $"[diag] Skipping '{monitor.szPhysicalMonitorDescription}': " +
+                                "NULL physical monitor handle (no DDC/CI control session).");
+                        }
                         continue;
                     }
 
@@ -186,12 +230,25 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     private static PHYSICAL_MONITOR[]? GetPhysicalMonitors(IntPtr hMonitor)
     {
         uint count = 0;
-        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref count) || count == 0)
+        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref count))
+        {
+            Console.Error.WriteLine(
+                $"[diag] GetNumberOfPhysicalMonitorsFromHMONITOR failed. Win32 error code: " +
+                $"{Marshal.GetLastWin32Error()}.");
+            return null;
+        }
+
+        if (count == 0)
             return null;
 
         var monitors = new PHYSICAL_MONITOR[count];
         if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, count, monitors))
+        {
+            Console.Error.WriteLine(
+                $"[diag] GetPhysicalMonitorsFromHMONITOR failed. Win32 error code: " +
+                $"{Marshal.GetLastWin32Error()}.");
             return null;
+        }
 
         return monitors;
     }
