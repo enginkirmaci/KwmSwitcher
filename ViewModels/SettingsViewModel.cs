@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -39,15 +40,29 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _startMinimized;
 
+    [ObservableProperty]
+    private ObservableCollection<string> _availableMonitors = [];
+
+    [ObservableProperty]
+    private string? _selectedTargetMonitor;
+
     partial void OnSelectedInputProtocolChanged(InputProtocolOption value)
     {
         UpdateInputSources(value.Protocol);
     }
 
-    public SettingsViewModel(IUsbMonitor usbMonitor, AppConfig config)
+    public SettingsViewModel(IUsbMonitor usbMonitor, AppConfig config, IReadOnlyList<string>? availableMonitors = null)
     {
         _usbMonitor = usbMonitor;
         _config = config;
+
+        AvailableMonitors = availableMonitors != null
+            ? new ObservableCollection<string>(availableMonitors)
+            : [];
+        SelectedTargetMonitor = !string.IsNullOrWhiteSpace(_config.TargetMonitorName) &&
+                                AvailableMonitors.Contains(_config.TargetMonitorName!)
+            ? _config.TargetMonitorName
+            : AvailableMonitors.FirstOrDefault();
 
         SelectedInputProtocol = InputProtocols.First(p => p.Protocol == _config.InputProtocol);
         UpdateInputSources(_config.InputProtocol);
@@ -111,6 +126,7 @@ public partial class SettingsViewModel : ViewModelBase
         _config.LocalInputSource = SelectedLocalInput.Code;
         _config.RemoteInputSource = SelectedRemoteInput.Code;
         _config.StartMinimized = StartMinimized;
+        _config.TargetMonitorName = SelectedTargetMonitor;
         _config.TrackedDeviceKeys = AvailableDevices
             .Where(d => d.IsTracked)
             .Select(d => d.Key)

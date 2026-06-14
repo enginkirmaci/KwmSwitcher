@@ -73,6 +73,15 @@
                     </ItemsControl>
                 </StackPanel>
 
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Target Monitor" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock Text="Leave empty to try all monitors. Select your external monitor (e.g. LG) on laptops to avoid switching the built-in display." TextWrapping="Wrap" Foreground="Gray" FontSize="12"/>
+                    <ComboBox Width="320"
+                              IsEditable="True"
+                              ItemsSource="{Binding AvailableMonitors}"
+                              Text="{Binding SelectedTargetMonitor}"/>
+                </StackPanel>
+
                 <CheckBox Content="Start minimized to tray" IsChecked="{Binding StartMinimized}"/>
             </StackPanel>
         </ScrollViewer>

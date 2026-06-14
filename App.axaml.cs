@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -42,7 +43,7 @@ public partial class App : Application
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 _usbMonitor = new WindowsUsbMonitor();
-                _monitorSwitcher = new WindowsMonitorSwitcher();
+                _monitorSwitcher = new WindowsMonitorSwitcher(_config);
             }
             else
             {
@@ -58,6 +59,8 @@ public partial class App : Application
             {
                 DataContext = _mainViewModel,
             };
+
+            _mainViewModel.ShowSettingsRequested += () => OpenSettings(mainWindow);
 
             mainWindow.Closing += (_, e) =>
             {
@@ -141,7 +144,13 @@ public partial class App : Application
         if (_usbMonitor == null)
             return;
 
-        var settingsVm = new SettingsViewModel(_usbMonitor, _config);
+        IReadOnlyList<string>? availableMonitors = null;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            availableMonitors = WindowsMonitorSwitcher.GetAvailableMonitorDescriptions();
+        }
+
+        var settingsVm = new SettingsViewModel(_usbMonitor, _config, availableMonitors);
         var settingsWindow = new SettingsWindow
         {
             DataContext = settingsVm,

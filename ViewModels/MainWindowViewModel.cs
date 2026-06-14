@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,6 +21,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _activeLabel = "Unknown";
+
+    public event Action? ShowSettingsRequested;
 
     public MainWindowViewModel()
     {
@@ -60,5 +63,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_engine != null)
             await _engine.SwitchToRemoteAsync();
+    }
+
+    [RelayCommand]
+    private void OpenSettings()
+    {
+        ShowSettingsRequested?.Invoke();
     }
 }
