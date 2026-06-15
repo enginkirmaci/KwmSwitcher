@@ -1,0 +1,70 @@
+<Styles
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Style Selector="TextBlock.page-title">
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource TitleForegroundBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style Selector="TextBlock.section-title">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource TitleForegroundBrush}" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+
+    <Style Selector="TextBlock.card-title">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource TitleForegroundBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.field-label">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.body-text">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyForegroundBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="TextBlock.subtle">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+    </Style>
+
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+
+    <Style Selector="Border.card-tight">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+
+    <Style Selector="Border.chip">
+        <Setter Property="Background" Value="{DynamicResource CardSubtleBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ChipRadius}" />
+        <Setter Property="Padding" Value="10,6" />
+    </Style>
+
+    <Style Selector="Border.horizontal-divider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource DividerBrush}" />
+    </Style>
+
+    <Style Selector="StackPanel.actions">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="8" />
+    </Style>
+
+</Styles>

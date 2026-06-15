@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="KwmSwitcher.App"
              xmlns:local="using:KwmSwitcher"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
         <local:ViewLocator/>
@@ -10,5 +10,14 @@
 
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="/Styles/AppStyles.axaml" />
     </Application.Styles>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Styles/ThemeResources.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
 </Application>

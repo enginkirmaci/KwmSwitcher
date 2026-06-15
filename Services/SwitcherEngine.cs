@@ -14,8 +14,11 @@ public class SwitcherEngine : IDisposable
     private readonly IMonitorSwitcher _monitorSwitcher;
     private readonly AppConfig _config;
     private readonly SemaphoreSlim _switchLock = new(1, 1);
-    private bool _localActive;
+    private volatile bool _localActive;
+    private volatile bool _stopped;
     private byte? _lastSetInputSource;
+    private DateTime _lastSwitchTime = DateTime.MinValue;
+    private readonly TimeSpan _switchCooldown = TimeSpan.FromSeconds(3);
 
     public event Action<bool>? LocalActiveChanged;
     public event Action<string>? StatusChanged;
@@ -31,6 +34,7 @@ public class SwitcherEngine : IDisposable
 
     public void Start()
     {
+        _stopped = false;
         _usbMonitor.DevicesChanged += OnDevicesChanged;
         _usbMonitor.Start();
 
@@ -40,83 +44,106 @@ public class SwitcherEngine : IDisposable
 
     public void Stop()
     {
+        _stopped = true;
         _usbMonitor.DevicesChanged -= OnDevicesChanged;
         _usbMonitor.Stop();
     }
 
     public async Task SwitchToLocalAsync()
     {
+        if (_stopped) return;
         if (!_switchLock.Wait(0)) return;
         try
         {
             if (_lastSetInputSource == _config.LocalInputSource)
             {
                 _localActive = true;
-                LocalActiveChanged?.Invoke(true);
-                StatusChanged?.Invoke($"Monitor already on {MonitorInputSource.GetName(_config.LocalInputSource)} (local)");
+                NotifyLocalActiveChanged(true);
+                NotifyStatusChanged($"Monitor already on {MonitorInputSource.GetName(_config.LocalInputSource)} (local)");
                 return;
             }
 
-            StatusChanged?.Invoke($"Switching monitor to {MonitorInputSource.GetName(_config.LocalInputSource)}...");
+            NotifyStatusChanged($"Switching monitor to {MonitorInputSource.GetName(_config.LocalInputSource)}...");
+            Log.Information("Switching monitor to {Input} (local)", MonitorInputSource.GetName(_config.LocalInputSource));
+
             var success = await _monitorSwitcher.SetInputSourceAsync(_config.LocalInputSource);
+
+            if (_stopped) return;
+
             if (success)
             {
                 _lastSetInputSource = _config.LocalInputSource;
                 _localActive = true;
-                LocalActiveChanged?.Invoke(true);
-                StatusChanged?.Invoke($"Monitor set to {MonitorInputSource.GetName(_config.LocalInputSource)} (local)");
+                _lastSwitchTime = DateTime.Now;
+                NotifyLocalActiveChanged(true);
+                NotifyStatusChanged($"Monitor set to {MonitorInputSource.GetName(_config.LocalInputSource)} (local)");
+                Log.Information("Monitor switched to {Input} (local)", MonitorInputSource.GetName(_config.LocalInputSource));
             }
             else
             {
-                StatusChanged?.Invoke("Failed to switch monitor input");
+                NotifyStatusChanged("Failed to switch monitor input");
+                Log.Warning("Failed to switch monitor to {Input} (local)", MonitorInputSource.GetName(_config.LocalInputSource));
             }
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error switching to local");
-            StatusChanged?.Invoke($"Error switching to local: {ex.Message}");
+            NotifyStatusChanged($"Error switching to local: {ex.Message}");
         }
         finally
         {
-            _switchLock.Release();
+            try { _switchLock.Release(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
         }
     }
 
     public async Task SwitchToRemoteAsync()
     {
+        if (_stopped) return;
         if (!_switchLock.Wait(0)) return;
         try
         {
             if (_lastSetInputSource == _config.RemoteInputSource)
             {
                 _localActive = false;
-                LocalActiveChanged?.Invoke(false);
-                StatusChanged?.Invoke($"Monitor already on {MonitorInputSource.GetName(_config.RemoteInputSource)} (remote)");
+                NotifyLocalActiveChanged(false);
+                NotifyStatusChanged($"Monitor already on {MonitorInputSource.GetName(_config.RemoteInputSource)} (remote)");
                 return;
             }
 
-            StatusChanged?.Invoke($"Switching monitor to {MonitorInputSource.GetName(_config.RemoteInputSource)}...");
+            NotifyStatusChanged($"Switching monitor to {MonitorInputSource.GetName(_config.RemoteInputSource)}...");
+            Log.Information("Switching monitor to {Input} (remote)", MonitorInputSource.GetName(_config.RemoteInputSource));
+
             var success = await _monitorSwitcher.SetInputSourceAsync(_config.RemoteInputSource);
+
+            if (_stopped) return;
+
             if (success)
             {
                 _lastSetInputSource = _config.RemoteInputSource;
                 _localActive = false;
-                LocalActiveChanged?.Invoke(false);
-                StatusChanged?.Invoke($"Monitor set to {MonitorInputSource.GetName(_config.RemoteInputSource)} (remote)");
+                _lastSwitchTime = DateTime.Now;
+                NotifyLocalActiveChanged(false);
+                NotifyStatusChanged($"Monitor set to {MonitorInputSource.GetName(_config.RemoteInputSource)} (remote)");
+                Log.Information("Monitor switched to {Input} (remote)", MonitorInputSource.GetName(_config.RemoteInputSource));
             }
             else
             {
-                StatusChanged?.Invoke("Failed to switch monitor input");
+                NotifyStatusChanged("Failed to switch monitor input");
+                Log.Warning("Failed to switch monitor to {Input} (remote)", MonitorInputSource.GetName(_config.RemoteInputSource));
             }
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error switching to remote");
-            StatusChanged?.Invoke($"Error switching to remote: {ex.Message}");
+            NotifyStatusChanged($"Error switching to remote: {ex.Message}");
         }
         finally
         {
-            _switchLock.Release();
+            try { _switchLock.Release(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
         }
     }
 
@@ -138,7 +165,7 @@ public class SwitcherEngine : IDisposable
 
         if (trackedKeys.Count == 0)
         {
-            StatusChanged?.Invoke("No tracked devices configured. Open settings to select USB devices.");
+            NotifyStatusChanged("No tracked devices configured. Open settings to select USB devices.");
             return;
         }
 
@@ -149,25 +176,27 @@ public class SwitcherEngine : IDisposable
         {
             _localActive = true;
             _lastSetInputSource = _config.LocalInputSource;
-            StatusChanged?.Invoke("Local machine active, tracked USB devices detected");
+            NotifyStatusChanged("Local machine active, tracked USB devices detected");
         }
         else
         {
             _localActive = false;
             _lastSetInputSource = _config.RemoteInputSource;
-            StatusChanged?.Invoke("Remote machine active, no tracked USB devices");
+            NotifyStatusChanged("Remote machine active, no tracked USB devices");
         }
 
-        LocalActiveChanged?.Invoke(_localActive);
+        NotifyLocalActiveChanged(_localActive);
     }
 
     private void EvaluateState(IEnumerable<UsbDeviceInfo> devices)
     {
+        if (_stopped) return;
+
         var trackedKeys = _config.TrackedDeviceKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (trackedKeys.Count == 0)
         {
-            StatusChanged?.Invoke("No tracked devices configured. Open settings to select USB devices.");
+            NotifyStatusChanged("No tracked devices configured. Open settings to select USB devices.");
             return;
         }
 
@@ -176,22 +205,45 @@ public class SwitcherEngine : IDisposable
 
         if (anyTrackedPresent && !_localActive)
         {
+            if (DateTime.Now - _lastSwitchTime < _switchCooldown)
+            {
+                Log.Debug("Ignoring switch-to-local request, within cooldown period");
+                return;
+            }
             _ = SafeSwitchToLocalAsync();
         }
         else if (!anyTrackedPresent && _localActive)
         {
+            if (DateTime.Now - _lastSwitchTime < _switchCooldown)
+            {
+                Log.Debug("Ignoring switch-to-remote request, within cooldown period");
+                return;
+            }
             _ = SafeSwitchToRemoteAsync();
         }
         else
         {
-            StatusChanged?.Invoke(anyTrackedPresent
+            NotifyStatusChanged(anyTrackedPresent
                 ? "Local machine active, tracked USB devices detected"
                 : "Remote machine active, no tracked USB devices");
         }
     }
 
+    private void NotifyLocalActiveChanged(bool active)
+    {
+        try { LocalActiveChanged?.Invoke(active); }
+        catch (Exception ex) { Log.Error(ex, "Error invoking LocalActiveChanged"); }
+    }
+
+    private void NotifyStatusChanged(string status)
+    {
+        try { StatusChanged?.Invoke(status); }
+        catch (Exception ex) { Log.Error(ex, "Error invoking StatusChanged"); }
+    }
+
     public void Dispose()
     {
+        _stopped = true;
         Stop();
         _switchLock.Dispose();
     }

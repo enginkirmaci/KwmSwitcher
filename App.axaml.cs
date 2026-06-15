@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -76,10 +77,30 @@ public partial class App : Application
 
             _mainViewModel.StartEngine();
 
+            desktop.Exit += OnExit;
+
             SetupTrayIcon(desktop, mainWindow);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void OnExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
+    {
+        ShutdownEngine();
+    }
+
+    private void ShutdownEngine()
+    {
+        try
+        {
+            _engine?.Dispose();
+            _usbMonitor?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during engine shutdown");
+        }
     }
 
     private void SetupTrayIcon(IClassicDesktopStyleApplicationLifetime desktop, MainWindow mainWindow)
@@ -107,8 +128,7 @@ public partial class App : Application
         var quitItem = new NativeMenuItem("Quit");
         quitItem.Click += (_, _) =>
         {
-            _engine?.Stop();
-            _usbMonitor?.Dispose();
+            ShutdownEngine();
             desktop.Shutdown();
         };
 
