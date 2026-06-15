@@ -118,6 +118,30 @@
         <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
     </Style>
 
+    <Style Selector="Button.icon-action">
+        <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyForegroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ButtonRadius}" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="40" />
+    </Style>
+    <Style Selector="Button.icon-action:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="Button.node-action">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyForegroundBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+    </Style>
+    <Style Selector="Button.node-action:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+    </Style>
+
     <Style Selector="Border.status-dot">
         <Setter Property="Width" Value="10" />
         <Setter Property="Height" Value="10" />

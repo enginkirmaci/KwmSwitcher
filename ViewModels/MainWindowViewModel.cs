@@ -21,6 +21,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isLocalActive;
 
     [ObservableProperty]
+    private bool _isRemoteActive;
+
+    [ObservableProperty]
     private string _activeLabel = "Unknown";
 
     public event Action? ShowSettingsRequested;
@@ -40,6 +43,7 @@ public partial class MainWindowViewModel : ViewModelBase
             Dispatcher.UIThread.Post(() =>
             {
                 IsLocalActive = active;
+                IsRemoteActive = !active;
                 ActiveLabel = active ? "Local (this machine)" : "Remote (other machine)";
             });
         };

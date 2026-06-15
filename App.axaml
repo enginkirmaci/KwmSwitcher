@@ -20,6 +20,7 @@
                 <ResourceInclude Source="/Styles/ThemeResources.axaml" />
             </ResourceDictionary.MergedDictionaries>
             <converters:BoolToStatusBrushConverter x:Key="BoolToStatusBrushConverter" />
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

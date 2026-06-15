@@ -6,10 +6,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:KwmSwitcher.ViewModels"
     Title=""
-    Width="460"
-    Height="300"
-    d:DesignHeight="350"
-    d:DesignWidth="460"
+    Width="520"
+    Height="320"
+    d:DesignHeight="400"
+    d:DesignWidth="520"
     x:DataType="vm:MainWindowViewModel"
     CanResize="False"
     ExtendClientAreaToDecorationsHint="True"
@@ -31,6 +31,19 @@
             IsHitTestVisible="True"
             PointerPressed="TitleBar_PointerPressed">
             <DockPanel Margin="16,0" VerticalAlignment="Center">
+                <Button
+                    Classes="titlebar-button"
+                    Click="CloseButton_Click"
+                    DockPanel.Dock="Right"
+                    ToolTip.Tip="Close">
+                    <Path
+                        Width="14"
+                        Height="14"
+                        VerticalAlignment="Center"
+                        Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
+                        Fill="{DynamicResource SubtitleForegroundBrush}"
+                        Stretch="Uniform" />
+                </Button>
                 <Button
                     Classes="titlebar-button"
                     Command="{Binding OpenSettingsCommand}"
@@ -62,48 +75,167 @@
         <Grid
             Grid.Row="1"
             Margin="24"
-            RowDefinitions="Auto,Auto,*,Auto">
+            RowDefinitions="*,Auto">
 
-            <TextBlock
-                Grid.Row="0"
-                Classes="subtle"
-                Text="{Binding StatusText}"
-                TextWrapping="Wrap" />
+            <Grid Grid.Row="0" Margin="0,0,0,0">
+                <Grid
+                    VerticalAlignment="Center"
+                    ColumnDefinitions="*,Auto,*,Auto,*"
+                    RowDefinitions="Auto,Auto">
 
+                    <!--  Local node  -->
+                    <Grid
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        Width="70"
+                        Height="70"
+                        HorizontalAlignment="Center">
+                        <Path
+                            Width="58"
+                            Height="58"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="M4,3H20A2,2 0 0,1 22,5V9A2,2 0 0,1 20,11H4A2,2 0 0,1 2,9V5A2,2 0 0,1 4,3M4,13H20A2,2 0 0,1 22,15V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V15A2,2 0 0,1 4,13M6,7A1,1 0 0,0 6,9A1,1 0 0,0 6,7M6,17A1,1 0 0,0 6,19A1,1 0 0,0 6,17Z"
+                            Fill="{Binding IsLocalActive, Converter={StaticResource BoolToStatusBrushConverter}, ConverterParameter='Local'}"
+                            Stretch="Uniform" />
+                        <Button
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Classes="node-action"
+                            Command="{Binding SwitchToLocalCommand}"
+                            ToolTip.Tip="Switch to Local">
+                            <Path
+                                Width="18"
+                                Height="18"
+                                Data="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"
+                                Fill="{DynamicResource BodyForegroundBrush}"
+                                Stretch="Uniform" />
+                        </Button>
+                    </Grid>
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Classes="subtle"
+                        Text="Local" />
+
+                    <!--  Local -> Monitor line  -->
+                    <Grid
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        Width="44"
+                        Height="2"
+                        VerticalAlignment="Center">
+                        <Line
+                            Stroke="{DynamicResource FaintForegroundBrush}"
+                            StrokeDashArray="4,4"
+                            StrokeThickness="2"
+                            StartPoint="0,1"
+                            EndPoint="44,1" />
+                        <Line
+                            IsVisible="{Binding IsLocalActive}"
+                            Stroke="{Binding IsLocalActive, Converter={StaticResource BoolToStatusBrushConverter}}"
+                            StrokeThickness="3"
+                            StartPoint="0,1"
+                            EndPoint="44,1" />
+                    </Grid>
+
+                    <!--  Monitor node  -->
+                    <Grid
+                        Grid.Row="0"
+                        Grid.Column="2"
+                        Width="90"
+                        Height="90"
+                        HorizontalAlignment="Center">
+                        <Path
+                            Width="72"
+                            Height="72"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="M4,2H20A2,2 0 0,1 22,4V14A2,2 0 0,1 20,16H4A2,2 0 0,1 2,14V4A2,2 0 0,1 4,2M4,4V14H20V4H4M8,18H16V20H8V18Z"
+                            Fill="{DynamicResource BodyForegroundBrush}"
+                            Stretch="Uniform" />
+                    </Grid>
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="2"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Classes="subtle"
+                        Text="Monitor" />
+
+                    <!--  Monitor -> Remote line  -->
+                    <Grid
+                        Grid.Row="0"
+                        Grid.Column="3"
+                        Width="44"
+                        Height="2"
+                        VerticalAlignment="Center">
+                        <Line
+                            Stroke="{DynamicResource FaintForegroundBrush}"
+                            StrokeDashArray="4,4"
+                            StrokeThickness="2"
+                            StartPoint="0,1"
+                            EndPoint="44,1" />
+                        <Line
+                            IsVisible="{Binding IsRemoteActive}"
+                            Stroke="{Binding IsLocalActive, Converter={StaticResource BoolToStatusBrushConverter}}"
+                            StrokeThickness="3"
+                            StartPoint="0,1"
+                            EndPoint="44,1" />
+                    </Grid>
+
+                    <!--  Remote node  -->
+                    <Grid
+                        Grid.Row="0"
+                        Grid.Column="4"
+                        Width="70"
+                        Height="70"
+                        HorizontalAlignment="Center">
+                        <Path
+                            Width="58"
+                            Height="58"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="M4,3H20A2,2 0 0,1 22,5V9A2,2 0 0,1 20,11H4A2,2 0 0,1 2,9V5A2,2 0 0,1 4,3M4,13H20A2,2 0 0,1 22,15V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V15A2,2 0 0,1 4,13M6,7A1,1 0 0,0 6,9A1,1 0 0,0 6,7M6,17A1,1 0 0,0 6,19A1,1 0 0,0 6,17Z"
+                            Fill="{Binding IsLocalActive, Converter={StaticResource BoolToStatusBrushConverter}, ConverterParameter='Remote'}"
+                            Stretch="Uniform" />
+                        <Button
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Classes="node-action"
+                            Command="{Binding SwitchToRemoteCommand}"
+                            ToolTip.Tip="Switch to Remote">
+                            <Path
+                                Width="18"
+                                Height="18"
+                                Data="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"
+                                Fill="{DynamicResource BodyForegroundBrush}"
+                                Stretch="Uniform" />
+                        </Button>
+                    </Grid>
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="4"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Classes="subtle"
+                        Text="Remote" />
+                </Grid>
+            </Grid>
+
+            <!--  Status section  -->
             <Border
                 Grid.Row="1"
-                Margin="0,16,0,0"
-                Padding="16,12"
-                Background="{DynamicResource CardBackgroundBrush}"
-                CornerRadius="{DynamicResource CardRadius}">
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <Border
-                        Width="12"
-                        Height="12"
-                        VerticalAlignment="Center"
-                        Background="{Binding IsLocalActive, Converter={StaticResource BoolToStatusBrushConverter}}"
-                        CornerRadius="6" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        Classes="card-title"
-                        Text="{Binding ActiveLabel}" />
-                </StackPanel>
-            </Border>
+                Margin="0,24,0,0"
+                Classes="section-card">
 
-            <StackPanel
-                Grid.Row="3"
-                HorizontalAlignment="Right"
-                Orientation="Horizontal"
-                Spacing="12">
-                <Button
-                    Classes="action"
-                    Command="{Binding SwitchToLocalCommand}"
-                    Content="Switch to Local" />
-                <Button
-                    Classes="action"
-                    Command="{Binding SwitchToRemoteCommand}"
-                    Content="Switch to Remote" />
-            </StackPanel>
+                <TextBlock
+                    Classes="body-text"
+                    Text="{Binding StatusText}"
+                    TextWrapping="Wrap" />
+            </Border>
         </Grid>
     </Grid>
 
