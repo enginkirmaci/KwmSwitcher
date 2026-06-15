@@ -13,6 +13,7 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IUsbMonitor _usbMonitor;
     private readonly AppConfig _config;
+    private readonly IAutoStartService _autoStartService;
 
     public event Action? RequestClose;
 
@@ -41,6 +42,9 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _startMinimized;
 
     [ObservableProperty]
+    private bool _autoStart;
+
+    [ObservableProperty]
     private ObservableCollection<string> _availableMonitors = [];
 
     [ObservableProperty]
@@ -51,10 +55,11 @@ public partial class SettingsViewModel : ViewModelBase
         UpdateInputSources(value.Protocol);
     }
 
-    public SettingsViewModel(IUsbMonitor usbMonitor, AppConfig config, IReadOnlyList<string>? availableMonitors = null)
+    public SettingsViewModel(IUsbMonitor usbMonitor, AppConfig config, IAutoStartService autoStartService, IReadOnlyList<string>? availableMonitors = null)
     {
         _usbMonitor = usbMonitor;
         _config = config;
+        _autoStartService = autoStartService;
 
         AvailableMonitors = availableMonitors != null
             ? new ObservableCollection<string>(availableMonitors)
@@ -73,6 +78,7 @@ public partial class SettingsViewModel : ViewModelBase
                               ?? InputSources.Skip(1).FirstOrDefault()
                               ?? InputSources.First();
         StartMinimized = _config.StartMinimized;
+        AutoStart = _autoStartService.IsEnabled();
 
         RefreshDevices();
     }
@@ -126,6 +132,11 @@ public partial class SettingsViewModel : ViewModelBase
         _config.LocalInputSource = SelectedLocalInput.Code;
         _config.RemoteInputSource = SelectedRemoteInput.Code;
         _config.StartMinimized = StartMinimized;
+        _config.AutoStart = AutoStart;
+        if (AutoStart)
+            _autoStartService.Enable();
+        else
+            _autoStartService.Disable();
         _config.TargetMonitorName = SelectedTargetMonitor;
         _config.TrackedDeviceKeys = AvailableDevices
             .Where(d => d.IsTracked)

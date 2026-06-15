@@ -25,6 +25,7 @@ public partial class App : Application
     private AppConfig _config = new();
     private IUsbMonitor? _usbMonitor;
     private IMonitorSwitcher? _monitorSwitcher;
+    private IAutoStartService? _autoStartService;
 
     public override void Initialize()
     {
@@ -41,11 +42,13 @@ public partial class App : Application
             {
                 _usbMonitor = new LinuxUsbMonitor();
                 _monitorSwitcher = new LinuxMonitorSwitcher(_config);
+                _autoStartService = new LinuxAutoStartService();
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 _usbMonitor = new WindowsUsbMonitor();
                 _monitorSwitcher = new WindowsMonitorSwitcher(_config);
+                _autoStartService = new WindowsAutoStartService();
             }
             else
             {
@@ -72,8 +75,19 @@ public partial class App : Application
 
             desktop.MainWindow = mainWindow;
 
-            if (!_config.StartMinimized)
+            if (_config.StartMinimized)
+            {
+                void OnOpened(object? s, EventArgs e)
+                {
+                    mainWindow.Opened -= OnOpened;
+                    mainWindow.Hide();
+                }
+                mainWindow.Opened += OnOpened;
+            }
+            else
+            {
                 mainWindow.Show();
+            }
 
             _mainViewModel.StartEngine();
 
@@ -169,7 +183,7 @@ public partial class App : Application
             availableMonitors = WindowsMonitorSwitcher.GetAvailableMonitorDescriptions();
         }
 
-        var settingsVm = new SettingsViewModel(_usbMonitor, _config, availableMonitors);
+        var settingsVm = new SettingsViewModel(_usbMonitor, _config, _autoStartService!, availableMonitors);
         var settingsWindow = new SettingsWindow
         {
             DataContext = settingsVm,
@@ -177,6 +191,6 @@ public partial class App : Application
 
         settingsVm.RequestClose += () => settingsWindow.Close();
 
-        settingsWindow.Show(owner);
+        settingsWindow.Show();
     }
 }

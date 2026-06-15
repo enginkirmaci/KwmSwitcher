@@ -156,6 +156,7 @@
                     </StackPanel>
 
                     <CheckBox Content="Start minimized to tray" IsChecked="{Binding StartMinimized}" />
+                    <CheckBox Content="Auto-start on system startup" IsChecked="{Binding AutoStart}" />
                 </StackPanel>
             </ScrollViewer>
 

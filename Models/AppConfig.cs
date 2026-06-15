@@ -14,6 +14,7 @@ public class AppConfig
     public List<string> TrackedDeviceKeys { get; set; } = [];
     public int PollIntervalMs { get; set; } = 1000;
     public bool StartMinimized { get; set; } = true;
+    public bool AutoStart { get; set; }
     public string? TargetMonitorName { get; set; }
 
     private static readonly string ConfigDir = Path.Combine(
