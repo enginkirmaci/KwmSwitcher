@@ -6,17 +6,17 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:KwmSwitcher.ViewModels"
     Title=""
-    Width="500"
-    Height="560"
-    d:DesignHeight="560"
-    d:DesignWidth="500"
+    Width="800"
+    Height="620"
+    d:DesignHeight="620"
+    d:DesignWidth="800"
     x:DataType="vm:SettingsViewModel"
     CanResize="False"
     ExtendClientAreaToDecorationsHint="True"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
 
-    <Grid Background="{DynamicResource ContentBackgroundBrush}" RowDefinitions="38,*">
+    <Grid Background="{DynamicResource ContentBackgroundBrush}" RowDefinitions="42,*">
 
         <Border
             Grid.Row="0"
@@ -25,7 +25,7 @@
             BorderThickness="0,0,0,1"
             IsHitTestVisible="True"
             PointerPressed="TitleBar_PointerPressed">
-            <DockPanel Margin="14,0" VerticalAlignment="Center">
+            <DockPanel Margin="16,0" VerticalAlignment="Center">
                 <TextBlock
                     VerticalAlignment="Center"
                     FontSize="13"
@@ -37,138 +37,138 @@
 
         <Grid
             Grid.Row="1"
-            Margin="20"
+            Margin="24"
             RowDefinitions="*,Auto">
 
-
             <ScrollViewer Grid.Row="0">
-                <StackPanel Spacing="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="{DynamicResource BodyForegroundBrush}"
-                            Text="Monitor Input Protocol" />
-                        <ComboBox
-                            Width="240"
-                            ItemsSource="{Binding InputProtocols}"
-                            SelectedItem="{Binding SelectedInputProtocol}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:InputProtocolOption">
-                                    <TextBlock Text="{Binding Name}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock
-                            FontSize="12"
-                            Foreground="{DynamicResource MutedForegroundBrush}"
-                            Text="Use LG if your monitor ignores standard DDC/CI input switching."
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="{DynamicResource BodyForegroundBrush}"
-                            Text="Monitor Input Sources" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock
-                                Width="160"
-                                VerticalAlignment="Center"
-                                Foreground="{DynamicResource BodyForegroundBrush}"
-                                Text="Local (this machine):" />
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                    <Border
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        Classes="section-card"
+                        Margin="0,0,8,16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Classes="section-heading" Text="Monitor Input Protocol" />
                             <ComboBox
-                                Width="180"
-                                ItemsSource="{Binding InputSources}"
-                                SelectedItem="{Binding SelectedLocalInput}">
+                                Width="280"
+                                ItemsSource="{Binding InputProtocols}"
+                                SelectedItem="{Binding SelectedInputProtocol}">
                                 <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:InputSourceOption">
+                                    <DataTemplate x:DataType="vm:InputProtocolOption">
                                         <TextBlock Text="{Binding Name}" />
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
+                            <TextBlock Classes="section-hint" Text="Use LG if your monitor ignores standard DDC/CI input switching." />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock
-                                Width="160"
-                                VerticalAlignment="Center"
-                                Foreground="{DynamicResource BodyForegroundBrush}"
-                                Text="Remote (other machine):" />
-                            <ComboBox
-                                Width="180"
-                                ItemsSource="{Binding InputSources}"
-                                SelectedItem="{Binding SelectedRemoteInput}">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:InputSourceOption">
-                                        <TextBlock Text="{Binding Name}" />
+                    </Border>
+
+                    <Border
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        Classes="section-card"
+                        Margin="8,0,0,16">
+                        <StackPanel Spacing="16">
+                            <TextBlock Classes="section-heading" Text="Monitor Input Sources" />
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="body-text" Text="Local (this machine):" />
+                                <ComboBox
+                                    Width="280"
+                                    ItemsSource="{Binding InputSources}"
+                                    SelectedItem="{Binding SelectedLocalInput}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:InputSourceOption">
+                                            <TextBlock Text="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="body-text" Text="Remote (other machine):" />
+                                <ComboBox
+                                    Width="280"
+                                    ItemsSource="{Binding InputSources}"
+                                    SelectedItem="{Binding SelectedRemoteInput}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:InputSourceOption">
+                                            <TextBlock Text="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Classes="section-card"
+                        Margin="0,0,8,16">
+                        <StackPanel Spacing="10">
+                            <DockPanel>
+                                <TextBlock
+                                    Classes="section-heading"
+                                    Text="Tracked USB Devices" />
+                                <Button
+                                    HorizontalAlignment="Right"
+                                    Padding="12,6"
+                                    Classes="action-ghost"
+                                    Command="{Binding RefreshDevicesCommand}"
+                                    Content="Refresh" />
+                            </DockPanel>
+                            <TextBlock Classes="section-hint" Text="Select USB devices connected through the USB switch. When these devices appear, the monitor switches to local input." />
+                            <ItemsControl ItemsSource="{Binding AvailableDevices}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:UsbDeviceItem">
+                                        <CheckBox
+                                            Margin="0,3"
+                                            Content="{Binding Description}"
+                                            IsChecked="{Binding IsTracked}" />
                                     </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
-                    </StackPanel>
+                    </Border>
 
-                    <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock
-                                FontSize="14"
-                                FontWeight="SemiBold"
-                                Foreground="{DynamicResource BodyForegroundBrush}"
-                                Text="Tracked USB Devices" />
-                            <Button
-                                Padding="8,4"
-                                Command="{Binding RefreshDevicesCommand}"
-                                Content="Refresh" />
-                        </StackPanel>
-                        <TextBlock
-                            FontSize="12"
-                            Foreground="{DynamicResource MutedForegroundBrush}"
-                            Text="Select USB devices connected through the USB switch. When these devices appear, the monitor switches to local input."
-                            TextWrapping="Wrap" />
-                        <ItemsControl ItemsSource="{Binding AvailableDevices}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:UsbDeviceItem">
-                                    <CheckBox
-                                        Margin="0,2"
-                                        Content="{Binding Description}"
-                                        IsChecked="{Binding IsTracked}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Spacing="0"
+                        Margin="8,0,0,0">
+                        <Border Classes="section-card">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="section-heading" Text="Target Monitor" />
+                                <TextBlock Classes="section-hint" Text="Leave empty to try all monitors. Select your external monitor (e.g. LG) on laptops to avoid switching the built-in display." />
+                                <ComboBox
+                                    Width="280"
+                                    IsEditable="True"
+                                    ItemsSource="{Binding AvailableMonitors}"
+                                    Text="{Binding SelectedTargetMonitor}" />
+                            </StackPanel>
+                        </Border>
 
-                    <StackPanel Spacing="8">
-                        <TextBlock
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="{DynamicResource BodyForegroundBrush}"
-                            Text="Target Monitor" />
-                        <TextBlock
-                            FontSize="12"
-                            Foreground="{DynamicResource MutedForegroundBrush}"
-                            Text="Leave empty to try all monitors. Select your external monitor (e.g. LG) on laptops to avoid switching the built-in display."
-                            TextWrapping="Wrap" />
-                        <ComboBox
-                            Width="320"
-                            IsEditable="True"
-                            ItemsSource="{Binding AvailableMonitors}"
-                            Text="{Binding SelectedTargetMonitor}" />
+                        <Border Classes="section-card">
+                            <StackPanel Spacing="12">
+                                <CheckBox Content="Start minimized to tray" IsChecked="{Binding StartMinimized}" />
+                                <CheckBox Content="Auto-start on system startup" IsChecked="{Binding AutoStart}" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-
-                    <CheckBox Content="Start minimized to tray" IsChecked="{Binding StartMinimized}" />
-                    <CheckBox Content="Auto-start on system startup" IsChecked="{Binding AutoStart}" />
-                </StackPanel>
+                </Grid>
             </ScrollViewer>
 
             <StackPanel
                 Grid.Row="1"
-                Margin="0,16,0,0"
+                Margin="0,20,0,0"
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 Spacing="8">
                 <Button
-                    Padding="24,8"
-                    Classes="accent"
+                    Classes="action-ghost"
+                    Command="{Binding CancelCommand}"
+                    Content="Cancel" />
+                <Button
+                    Classes="action-primary"
                     Command="{Binding SaveCommand}"
                     Content="Save" />
             </StackPanel>

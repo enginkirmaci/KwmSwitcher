@@ -5,55 +5,73 @@
     <ResourceDictionary.ThemeDictionaries>
 
         <ResourceDictionary x:Key="Dark">
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#202020" />
-            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#1E1E1E" />
-            <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#2D2D2D" />
-            <SolidColorBrush x:Key="ContentBackgroundBrush" Color="#252526" />
-            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#2D2D30" />
-            <SolidColorBrush x:Key="CardSubtleBackgroundBrush" Color="#333333" />
-            <SolidColorBrush x:Key="DividerBrush" Color="#3F3F46" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F0F0F" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#161616" />
+            <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#2A2A2A" />
+            <SolidColorBrush x:Key="ContentBackgroundBrush" Color="#1A1A1A" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#222222" />
+            <SolidColorBrush x:Key="CardSubtleBackgroundBrush" Color="#2A2A2A" />
+            <SolidColorBrush x:Key="DividerBrush" Color="#333333" />
             <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#2D2D2D" />
-            <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#252525" />
+            <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#2A2A2A" />
+            <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#262626" />
 
-            <SolidColorBrush x:Key="TitleForegroundBrush" Color="#F0F0F0" />
-            <SolidColorBrush x:Key="SubtitleForegroundBrush" Color="#C8C8E0" />
-            <SolidColorBrush x:Key="BodyForegroundBrush" Color="#D0D0D0" />
-            <SolidColorBrush x:Key="MutedForegroundBrush" Color="#8A8A8A" />
+            <SolidColorBrush x:Key="TitleForegroundBrush" Color="#F5F5F5" />
+            <SolidColorBrush x:Key="SubtitleForegroundBrush" Color="#D4D4E8" />
+            <SolidColorBrush x:Key="BodyForegroundBrush" Color="#DCDCDC" />
+            <SolidColorBrush x:Key="MutedForegroundBrush" Color="#9A9A9A" />
             <SolidColorBrush x:Key="FaintForegroundBrush" Color="#6A6A6A" />
 
             <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#3B82F6" />
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#2563EB" />
+            <SolidColorBrush x:Key="AccentSubtleBrush" Color="#1E3A5F" />
 
-            <SolidColorBrush x:Key="StatusActiveBrush" Color="#4CAF50" />
-            <SolidColorBrush x:Key="StatusInactiveBrush" Color="#9E9E9E" />
-            <SolidColorBrush x:Key="InfoAccentBrush" Color="#2196F3" />
-            <SolidColorBrush x:Key="WarningAccentBrush" Color="#FF9800" />
-            <SolidColorBrush x:Key="DangerAccentBrush" Color="#F44336" />
+            <SolidColorBrush x:Key="StatusActiveBrush" Color="#22C55E" />
+            <SolidColorBrush x:Key="StatusInactiveBrush" Color="#6B7280" />
+            <SolidColorBrush x:Key="InfoAccentBrush" Color="#3B82F6" />
+            <SolidColorBrush x:Key="WarningAccentBrush" Color="#F59E0B" />
+            <SolidColorBrush x:Key="DangerAccentBrush" Color="#EF4444" />
+
+            <SolidColorBrush x:Key="LocalBrush" Color="#22C55E" />
+            <SolidColorBrush x:Key="LocalSubtleBrush" Color="#14532D" />
+            <SolidColorBrush x:Key="RemoteBrush" Color="#8B5CF6" />
+            <SolidColorBrush x:Key="RemoteSubtleBrush" Color="#2E1065" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F3F3F3" />
-            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#FAFAFA" />
-            <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#E0E0E0" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#E5E5E5" />
             <SolidColorBrush x:Key="ContentBackgroundBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#F5F5F5" />
-            <SolidColorBrush x:Key="CardSubtleBackgroundBrush" Color="#ECECEC" />
-            <SolidColorBrush x:Key="DividerBrush" Color="#E0E0E0" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#F8F8F8" />
+            <SolidColorBrush x:Key="CardSubtleBackgroundBrush" Color="#F0F0F0" />
+            <SolidColorBrush x:Key="DividerBrush" Color="#E5E5E5" />
             <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#E5E5E5" />
-            <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#EEEEEE" />
+            <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#F0F0F0" />
+            <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#F5F5F5" />
 
-            <SolidColorBrush x:Key="TitleForegroundBrush" Color="#1A1A1A" />
-            <SolidColorBrush x:Key="SubtitleForegroundBrush" Color="#3A3A3A" />
-            <SolidColorBrush x:Key="BodyForegroundBrush" Color="#2A2A2A" />
-            <SolidColorBrush x:Key="MutedForegroundBrush" Color="#6A6A6A" />
-            <SolidColorBrush x:Key="FaintForegroundBrush" Color="#9A9A9A" />
+            <SolidColorBrush x:Key="TitleForegroundBrush" Color="#111111" />
+            <SolidColorBrush x:Key="SubtitleForegroundBrush" Color="#333333" />
+            <SolidColorBrush x:Key="BodyForegroundBrush" Color="#222222" />
+            <SolidColorBrush x:Key="MutedForegroundBrush" Color="#777777" />
+            <SolidColorBrush x:Key="FaintForegroundBrush" Color="#AAAAAA" />
 
             <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#3B82F6" />
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#2563EB" />
+            <SolidColorBrush x:Key="AccentSubtleBrush" Color="#DBEAFE" />
 
-            <SolidColorBrush x:Key="StatusActiveBrush" Color="#2E7D32" />
-            <SolidColorBrush x:Key="StatusInactiveBrush" Color="#757575" />
-            <SolidColorBrush x:Key="InfoAccentBrush" Color="#1976D2" />
-            <SolidColorBrush x:Key="WarningAccentBrush" Color="#ED6C02" />
-            <SolidColorBrush x:Key="DangerAccentBrush" Color="#D32F2F" />
+            <SolidColorBrush x:Key="StatusActiveBrush" Color="#16A34A" />
+            <SolidColorBrush x:Key="StatusInactiveBrush" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="InfoAccentBrush" Color="#2563EB" />
+            <SolidColorBrush x:Key="WarningAccentBrush" Color="#D97706" />
+            <SolidColorBrush x:Key="DangerAccentBrush" Color="#DC2626" />
+
+            <SolidColorBrush x:Key="LocalBrush" Color="#16A34A" />
+            <SolidColorBrush x:Key="LocalSubtleBrush" Color="#DCFCE7" />
+            <SolidColorBrush x:Key="RemoteBrush" Color="#7C3AED" />
+            <SolidColorBrush x:Key="RemoteSubtleBrush" Color="#EDE9FE" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
@@ -64,8 +82,9 @@
     <x:Double x:Key="SpacingLg">16</x:Double>
     <x:Double x:Key="SpacingXl">24</x:Double>
 
-    <CornerRadius x:Key="CardRadius">8</CornerRadius>
+    <CornerRadius x:Key="CardRadius">12</CornerRadius>
     <CornerRadius x:Key="PillRadius">14</CornerRadius>
-    <CornerRadius x:Key="ChipRadius">6</CornerRadius>
+    <CornerRadius x:Key="ChipRadius">8</CornerRadius>
+    <CornerRadius x:Key="ButtonRadius">8</CornerRadius>
 
 </ResourceDictionary>

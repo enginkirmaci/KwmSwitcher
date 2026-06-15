@@ -18,7 +18,7 @@
 
     <Style Selector="TextBlock.card-title">
         <Setter Property="FontSize" Value="14" />
-        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TitleForegroundBrush}" />
     </Style>
 
@@ -65,6 +65,88 @@
     <Style Selector="StackPanel.actions">
         <Setter Property="Orientation" Value="Horizontal" />
         <Setter Property="Spacing" Value="8" />
+    </Style>
+
+    <Style Selector="Button.action">
+        <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyForegroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ButtonRadius}" />
+        <Setter Property="Padding" Value="20,10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.action:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="Button.action-primary">
+        <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TitleForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ButtonRadius}" />
+        <Setter Property="Padding" Value="20,10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.action-primary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="Button.action-ghost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ButtonRadius}" />
+        <Setter Property="Padding" Value="20,10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.action-ghost:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyForegroundBrush}" />
+    </Style>
+
+    <Style Selector="Button.titlebar-button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SubtitleForegroundBrush}" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button.titlebar-button:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="Border.status-dot">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="CornerRadius" Value="5" />
+    </Style>
+
+    <Style Selector="Border.status-dot /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="5" />
+    </Style>
+
+    <Style Selector="Border.section-card">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+
+    <Style Selector="TextBlock.section-heading">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TitleForegroundBrush}" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+
+    <Style Selector="TextBlock.section-hint">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
 
 </Styles>

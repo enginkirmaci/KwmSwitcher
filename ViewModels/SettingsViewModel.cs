@@ -145,6 +145,12 @@ public partial class SettingsViewModel : ViewModelBase
         _config.Save();
         RequestClose?.Invoke();
     }
+
+    [RelayCommand]
+    private void Cancel()
+    {
+        RequestClose?.Invoke();
+    }
 }
 
 public record InputSourceOption(byte Code, string Name);
