@@ -41,77 +41,19 @@
             RowDefinitions="*,Auto">
 
             <ScrollViewer Grid.Row="0">
-                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto">
                     <Border
                         Grid.Row="0"
                         Grid.Column="0"
-                        Classes="section-card"
-                        Margin="0,0,8,16">
-                        <StackPanel Spacing="10">
-                            <TextBlock Classes="section-heading" Text="Monitor Input Protocol" />
-                            <ComboBox
-                                Width="280"
-                                ItemsSource="{Binding InputProtocols}"
-                                SelectedItem="{Binding SelectedInputProtocol}">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:InputProtocolOption">
-                                        <TextBlock Text="{Binding Name}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock Classes="section-hint" Text="Use LG if your monitor ignores standard DDC/CI input switching." />
-                        </StackPanel>
-                    </Border>
-
-                    <Border
-                        Grid.Row="0"
-                        Grid.Column="1"
-                        Classes="section-card"
-                        Margin="8,0,0,16">
-                        <StackPanel Spacing="16">
-                            <TextBlock Classes="section-heading" Text="Monitor Input Sources" />
-                            <StackPanel Spacing="6">
-                                <TextBlock Classes="body-text" Text="Local (this machine):" />
-                                <ComboBox
-                                    Width="280"
-                                    ItemsSource="{Binding InputSources}"
-                                    SelectedItem="{Binding SelectedLocalInput}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:InputSourceOption">
-                                            <TextBlock Text="{Binding Name}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </StackPanel>
-                            <StackPanel Spacing="6">
-                                <TextBlock Classes="body-text" Text="Remote (other machine):" />
-                                <ComboBox
-                                    Width="280"
-                                    ItemsSource="{Binding InputSources}"
-                                    SelectedItem="{Binding SelectedRemoteInput}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:InputSourceOption">
-                                            <TextBlock Text="{Binding Name}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <Border
-                        Grid.Row="1"
-                        Grid.Column="0"
-                        Classes="section-card"
-                        Margin="0,0,8,16">
+                        Margin="0,0,8,16"
+                        VerticalAlignment="Top"
+                        Classes="section-card">
                         <StackPanel Spacing="10">
                             <DockPanel>
-                                <TextBlock
-                                    Classes="section-heading"
-                                    Text="Tracked USB Devices" />
+                                <TextBlock Classes="section-heading" Text="Tracked USB Devices" />
                                 <Button
-                                    HorizontalAlignment="Right"
                                     Padding="12,6"
+                                    HorizontalAlignment="Right"
                                     Classes="action-ghost"
                                     Command="{Binding RefreshDevicesCommand}"
                                     Content="Refresh" />
@@ -131,10 +73,59 @@
                     </Border>
 
                     <StackPanel
-                        Grid.Row="1"
+                        Grid.Row="0"
                         Grid.Column="1"
-                        Spacing="0"
-                        Margin="8,0,0,0">
+                        Margin="8,0,0,0"
+                        Spacing="0">
+                        <Border Classes="section-card">
+                            <StackPanel Spacing="16">
+                                <TextBlock Classes="section-heading" Text="Monitor Input Sources" />
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="body-text" Text="Local (this machine):" />
+                                    <ComboBox
+                                        Width="280"
+                                        ItemsSource="{Binding InputSources}"
+                                        SelectedItem="{Binding SelectedLocalInput}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:InputSourceOption">
+                                                <TextBlock Text="{Binding Name}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="body-text" Text="Remote (other machine):" />
+                                    <ComboBox
+                                        Width="280"
+                                        ItemsSource="{Binding InputSources}"
+                                        SelectedItem="{Binding SelectedRemoteInput}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:InputSourceOption">
+                                                <TextBlock Text="{Binding Name}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="section-card">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="section-heading" Text="Monitor Input Protocol" />
+                                <ComboBox
+                                    Width="280"
+                                    ItemsSource="{Binding InputProtocols}"
+                                    SelectedItem="{Binding SelectedInputProtocol}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:InputProtocolOption">
+                                            <TextBlock Text="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Classes="section-hint" Text="Use LG if your monitor ignores standard DDC/CI input switching." />
+                            </StackPanel>
+                        </Border>
+
                         <Border Classes="section-card">
                             <StackPanel Spacing="10">
                                 <TextBlock Classes="section-heading" Text="Target Monitor" />

@@ -119,7 +119,7 @@ public partial class App : Application
 
     private void SetupTrayIcon(IClassicDesktopStyleApplicationLifetime desktop, MainWindow mainWindow)
     {
-        var showItem = new NativeMenuItem("Show");
+        var showItem = new NativeMenuItem("Main");
         showItem.Click += (_, _) => mainWindow.Show();
 
         var settingsItem = new NativeMenuItem("Settings");
