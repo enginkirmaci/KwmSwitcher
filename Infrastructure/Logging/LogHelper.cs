@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Serilog;
 
-namespace KwmSwitcher;
+namespace KwmSwitcher.Infrastructure.Logging;
 
 public static class LogHelper
 {

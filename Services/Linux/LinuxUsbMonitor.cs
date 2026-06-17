@@ -10,16 +10,22 @@ namespace KwmSwitcher.Services.Linux;
 
 public class LinuxUsbMonitor : IUsbMonitor
 {
+    private readonly AppConfig _config;
     private Timer? _pollTimer;
     private HashSet<string> _lastDeviceKeys = [];
-    private int _pollIntervalMs = 1000;
+
+    public LinuxUsbMonitor(AppConfig config)
+    {
+        _config = config;
+    }
 
     public event Action<IEnumerable<UsbDeviceInfo>>? DevicesChanged;
 
     public void Start()
     {
         _lastDeviceKeys = [..GetCurrentDevices().Select(d => d.Key)];
-        _pollTimer = new Timer(Poll, null, 0, _pollIntervalMs);
+        // Poll interval is read at start; a restart picks up any edited value.
+        _pollTimer = new Timer(Poll, null, 0, _config.PollIntervalMs);
     }
 
     public void Stop()

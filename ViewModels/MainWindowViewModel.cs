@@ -37,6 +37,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public event Action? ShowSettingsRequested;
 
+    // Design-time only: satisfies the XAML <Design.DataContext> instance.
+    // Runtime construction must use the (SwitcherEngine, AppConfig) overload.
     public MainWindowViewModel()
     {
         _config = AppConfig.Load();
@@ -47,31 +49,24 @@ public partial class MainWindowViewModel : ViewModelBase
         _engine = engine;
         _config = config;
 
+        // The engine raises these on the UI thread via its postToConsumer hook,
+        // so handlers can update bound properties directly.
         _engine.LocalActiveChanged += active =>
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                IsLocalActive = active;
-                IsRemoteActive = !active;
-                ActiveLabel = active ? "Local (this machine)" : "Remote (other machine)";
-            });
+            IsLocalActive = active;
+            IsRemoteActive = !active;
+            ActiveLabel = active ? "Local (this machine)" : "Remote (other machine)";
         };
 
         _engine.StatusChanged += status =>
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                StatusText = status;
-            });
+            StatusText = status;
         };
 
         _engine.PipModeChanged += mode =>
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                IsPipActive = MonitorInputSource.IsPipActive(mode);
-                PipLabel = IsPipActive ? MonitorInputSource.GetPipModeName(mode) : "PiP";
-            });
+            IsPipActive = MonitorInputSource.IsPipActive(mode);
+            PipLabel = IsPipActive ? MonitorInputSource.GetPipModeName(mode) : "PiP";
         };
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -130,6 +131,69 @@ public partial class LinuxMonitorSwitcher : IMonitorSwitcher
             Console.Error.WriteLine($"Failed to set PiP mode: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Best-effort monitor enumeration via <c>ddcutil detect</c>. Each detected
+    /// display contributes a synthetic "Display N — Model" label so the user can
+    /// pick one as the target. Returns an empty list on any failure.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetAvailableMonitorsAsync()
+    {
+        try
+        {
+            var (success, stdout, stderr) = await RunDdcutilCaptureAsync("detect");
+            if (!success)
+            {
+                if (!string.IsNullOrWhiteSpace(stderr))
+                    Log.Warning("ddcutil detect failed: {Stderr}", stderr.Trim());
+                return [];
+            }
+            return ParseDetectDescriptions(stdout);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to enumerate monitors via ddcutil detect");
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<string> ParseDetectDescriptions(string output)
+    {
+        // ddcutil detect output looks like:
+        //   Display 1
+        //      I2C bus:  /dev/i2c-5
+        //      Monitor:                 GBT3241
+        //      ...
+        var descriptions = new List<string>();
+        var displayIndex = 0;
+        string? model = null;
+
+        foreach (var rawLine in output.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.StartsWith("Display ", StringComparison.Ordinal))
+            {
+                if (displayIndex > 0 && !string.IsNullOrWhiteSpace(model))
+                    descriptions.Add($"Display {displayIndex} — {model}");
+                displayIndex = int.TryParse(line.AsSpan("Display ".Length), out var n) ? n : displayIndex + 1;
+                model = null;
+                continue;
+            }
+
+            const string MonitorPrefix = "Monitor:";
+            if (line.StartsWith(MonitorPrefix, StringComparison.Ordinal))
+            {
+                var value = line[MonitorPrefix.Length..].Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                    model = value;
+            }
+        }
+
+        if (displayIndex > 0 && !string.IsNullOrWhiteSpace(model))
+            descriptions.Add($"Display {displayIndex} — {model}");
+
+        return descriptions;
     }
 
     private static string BuildSetVcpArgs(InputSwitchProtocol protocol, byte vcpCode, byte value, byte i2cAddr) =>

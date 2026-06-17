@@ -13,6 +13,11 @@ public class SwitcherEngine : IDisposable
     private readonly IUsbMonitor _usbMonitor;
     private readonly IMonitorSwitcher _monitorSwitcher;
     private readonly AppConfig _config;
+    /// <summary>
+    /// Marshals event notifications to the UI thread. Defaults to inline
+    /// (synchronous) so the engine is testable without a UI sync context.
+    /// </summary>
+    private readonly Action<Action> _postToConsumer;
     private readonly SemaphoreSlim _switchLock = new(1, 1);
     private readonly SemaphoreSlim _pipLock = new(1, 1);
     private volatile bool _localActive;
@@ -32,11 +37,13 @@ public class SwitcherEngine : IDisposable
     public bool IsPipActive => MonitorInputSource.IsPipActive(_pipMode);
     public bool PipQueryFailed => _pipQueryFailed;
 
-    public SwitcherEngine(IUsbMonitor usbMonitor, IMonitorSwitcher monitorSwitcher, AppConfig config)
+    public SwitcherEngine(IUsbMonitor usbMonitor, IMonitorSwitcher monitorSwitcher, AppConfig config,
+                          Action<Action>? postToConsumer = null)
     {
         _usbMonitor = usbMonitor;
         _monitorSwitcher = monitorSwitcher;
         _config = config;
+        _postToConsumer = postToConsumer ?? (action => action());
     }
 
     public void Start()
@@ -249,13 +256,13 @@ public class SwitcherEngine : IDisposable
 
     private void NotifyLocalActiveChanged(bool active)
     {
-        try { LocalActiveChanged?.Invoke(active); }
+        try { _postToConsumer(() => LocalActiveChanged?.Invoke(active)); }
         catch (Exception ex) { Log.Error(ex, "Error invoking LocalActiveChanged"); }
     }
 
     private void NotifyStatusChanged(string status)
     {
-        try { StatusChanged?.Invoke(status); }
+        try { _postToConsumer(() => StatusChanged?.Invoke(status)); }
         catch (Exception ex) { Log.Error(ex, "Error invoking StatusChanged"); }
     }
 
@@ -361,7 +368,7 @@ public class SwitcherEngine : IDisposable
 
     private void NotifyPipModeChanged(byte mode)
     {
-        try { PipModeChanged?.Invoke(mode); }
+        try { _postToConsumer(() => PipModeChanged?.Invoke(mode)); }
         catch (Exception ex) { Log.Error(ex, "Error invoking PipModeChanged"); }
     }
 

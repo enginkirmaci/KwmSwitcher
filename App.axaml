@@ -1,13 +1,8 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="KwmSwitcher.App"
-             xmlns:local="using:KwmSwitcher"
              xmlns:converters="using:KwmSwitcher.Converters"
              RequestedThemeVariant="Dark">
-
-    <Application.DataTemplates>
-        <local:ViewLocator/>
-    </Application.DataTemplates>
 
     <Application.Styles>
         <FluentTheme />

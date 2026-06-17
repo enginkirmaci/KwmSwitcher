@@ -6,8 +6,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
+using Avalonia.Threading;
 using KwmSwitcher.Models;
 using KwmSwitcher.Services;
 using KwmSwitcher.Services.Linux;
@@ -26,6 +25,7 @@ public partial class App : Application
     private IUsbMonitor? _usbMonitor;
     private IMonitorSwitcher? _monitorSwitcher;
     private IAutoStartService? _autoStartService;
+    private ITrayIconService? _trayIconService;
 
     public override void Initialize()
     {
@@ -40,7 +40,7 @@ public partial class App : Application
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                _usbMonitor = new LinuxUsbMonitor();
+                _usbMonitor = new LinuxUsbMonitor(_config);
                 _monitorSwitcher = new LinuxMonitorSwitcher(_config);
                 _autoStartService = new LinuxAutoStartService();
             }
@@ -57,7 +57,8 @@ public partial class App : Application
                 return;
             }
 
-            _engine = new SwitcherEngine(_usbMonitor, _monitorSwitcher, _config);
+            _engine = new SwitcherEngine(_usbMonitor, _monitorSwitcher, _config,
+                postToConsumer: action => Dispatcher.UIThread.Post(action));
             _mainViewModel = new MainWindowViewModel(_engine, _config);
 
             var mainWindow = new MainWindow
@@ -65,7 +66,7 @@ public partial class App : Application
                 DataContext = _mainViewModel,
             };
 
-            _mainViewModel.ShowSettingsRequested += () => OpenSettings(mainWindow);
+            _mainViewModel.ShowSettingsRequested += () => _ = OpenSettingsAsync(mainWindow);
 
             mainWindow.Closing += (_, e) =>
             {
@@ -93,10 +94,23 @@ public partial class App : Application
 
             desktop.Exit += OnExit;
 
-            SetupTrayIcon(desktop, mainWindow);
+            _trayIconService = new TrayIconService();
+            _trayIconService.Initialize(
+                showMainWindow: mainWindow.Show,
+                openSettings: () => _ = OpenSettingsAsync(mainWindow),
+                switchToLocal: () => SafeSwitchAsync(() => _engine!.SwitchToLocalAsync(), "local"),
+                switchToRemote: () => SafeSwitchAsync(() => _engine!.SwitchToRemoteAsync(), "remote"),
+                togglePip: () => SafeSwitchAsync(() => _engine!.TogglePipAsync(), "toggle PiP"),
+                quit: () => { ShutdownEngine(); desktop.Shutdown(); });
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static async Task SafeSwitchAsync(Func<Task> action, string label)
+    {
+        try { await action(); }
+        catch (Exception ex) { Log.Error(ex, "Error {Label} from tray", label); }
     }
 
     private void OnExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
@@ -108,6 +122,7 @@ public partial class App : Application
     {
         try
         {
+            _trayIconService?.Dispose();
             _engine?.Dispose();
             _usbMonitor?.Dispose();
         }
@@ -117,79 +132,12 @@ public partial class App : Application
         }
     }
 
-    private void SetupTrayIcon(IClassicDesktopStyleApplicationLifetime desktop, MainWindow mainWindow)
+    private async Task OpenSettingsAsync(Window owner)
     {
-        var showItem = new NativeMenuItem("Main");
-        showItem.Click += (_, _) => mainWindow.Show();
-
-        var settingsItem = new NativeMenuItem("Settings");
-        settingsItem.Click += (_, _) => OpenSettings(mainWindow);
-
-        var switchLocalItem = new NativeMenuItem("Switch to Local");
-        switchLocalItem.Click += async (_, _) =>
-        {
-            try { if (_engine != null) await _engine.SwitchToLocalAsync(); }
-            catch (Exception ex) { Log.Error(ex, "Error switching to local from tray"); }
-        };
-
-        var switchRemoteItem = new NativeMenuItem("Switch to Remote");
-        switchRemoteItem.Click += async (_, _) =>
-        {
-            try { if (_engine != null) await _engine.SwitchToRemoteAsync(); }
-            catch (Exception ex) { Log.Error(ex, "Error switching to remote from tray"); }
-        };
-
-        var togglePipItem = new NativeMenuItem("Toggle PiP/PBP");
-        togglePipItem.Click += async (_, _) =>
-        {
-            try { if (_engine != null) await _engine.TogglePipAsync(); }
-            catch (Exception ex) { Log.Error(ex, "Error toggling PiP from tray"); }
-        };
-
-        var quitItem = new NativeMenuItem("Quit");
-        quitItem.Click += (_, _) =>
-        {
-            ShutdownEngine();
-            desktop.Shutdown();
-        };
-
-        var menu = new NativeMenu();
-        menu.Items.Add(showItem);
-        menu.Items.Add(settingsItem);
-        menu.Items.Add(new NativeMenuItemSeparator());
-        menu.Items.Add(switchLocalItem);
-        menu.Items.Add(switchRemoteItem);
-        menu.Items.Add(togglePipItem);
-        menu.Items.Add(new NativeMenuItemSeparator());
-        menu.Items.Add(quitItem);
-
-        var trayIcon = new TrayIcon
-        {
-            Icon = new WindowIcon(new Bitmap(AssetLoader.Open(new Uri("avares://KwmSwitcher/Assets/avalonia-logo.ico")))),
-            ToolTipText = "KWM Switcher",
-            Menu = menu,
-        };
-
-        var icons = TrayIcon.GetIcons(this);
-        if (icons == null)
-        {
-            icons = [];
-            TrayIcon.SetIcons(this, icons);
-        }
-
-        icons.Add(trayIcon);
-    }
-
-    private void OpenSettings(Window owner)
-    {
-        if (_usbMonitor == null)
+        if (_usbMonitor == null || _monitorSwitcher == null)
             return;
 
-        IReadOnlyList<string>? availableMonitors = null;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            availableMonitors = WindowsMonitorSwitcher.GetAvailableMonitorDescriptions();
-        }
+        IReadOnlyList<string> availableMonitors = await _monitorSwitcher.GetAvailableMonitorsAsync();
 
         var settingsVm = new SettingsViewModel(_usbMonitor, _config, _autoStartService!, availableMonitors);
         var settingsWindow = new SettingsWindow

@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using KwmSwitcher.Infrastructure.Logging;
 using Serilog;
 
 namespace KwmSwitcher;

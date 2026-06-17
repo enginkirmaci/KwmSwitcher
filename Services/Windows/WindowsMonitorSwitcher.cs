@@ -145,7 +145,12 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     /// Lists the descriptions of all currently connected monitors.
     /// Uses SetupAPI to enumerate monitor device interfaces — no dxva2.dll dependency.
     /// </summary>
-    public static IReadOnlyList<string> GetAvailableMonitorDescriptions()
+    public Task<IReadOnlyList<string>> GetAvailableMonitorsAsync()
+    {
+        return Task.FromResult(GetAvailableMonitorDescriptions());
+    }
+
+    private static IReadOnlyList<string> GetAvailableMonitorDescriptions()
     {
         var descriptions = new List<string>();
 

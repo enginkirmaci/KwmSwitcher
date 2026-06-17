@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using Avalonia;
+using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
@@ -22,10 +23,9 @@ public class BoolToStatusBrushConverter : IValueConverter
         };
     }
 
+    // One-way converter: no meaningful back-conversion.
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        throw new NotImplementedException();
-    }
+        => BindingOperations.DoNothing;
 
     private static SolidColorBrush GetBrush(string key)
     {
