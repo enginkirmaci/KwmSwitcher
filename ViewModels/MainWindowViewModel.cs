@@ -26,6 +26,15 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _activeLabel = "Unknown";
 
+    [ObservableProperty]
+    private bool _isPipActive;
+
+    [ObservableProperty]
+    private string _pipLabel = "PiP";
+
+    [ObservableProperty]
+    private bool _isPipBusy;
+
     public event Action? ShowSettingsRequested;
 
     public MainWindowViewModel()
@@ -55,6 +64,15 @@ public partial class MainWindowViewModel : ViewModelBase
                 StatusText = status;
             });
         };
+
+        _engine.PipModeChanged += mode =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsPipActive = MonitorInputSource.IsPipActive(mode);
+                PipLabel = IsPipActive ? MonitorInputSource.GetPipModeName(mode) : "PiP";
+            });
+        };
     }
 
     public void StartEngine()
@@ -74,6 +92,28 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_engine != null)
             await _engine.SwitchToRemoteAsync();
+    }
+
+    [RelayCommand]
+    private async Task TogglePip()
+    {
+        if (_engine == null) return;
+        IsPipBusy = true;
+        try
+        {
+            await _engine.TogglePipAsync();
+        }
+        finally
+        {
+            Dispatcher.UIThread.Post(() => IsPipBusy = false);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RefreshPip()
+    {
+        if (_engine != null)
+            await _engine.RefreshPipStateAsync();
     }
 
     [RelayCommand]

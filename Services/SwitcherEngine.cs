@@ -14,16 +14,23 @@ public class SwitcherEngine : IDisposable
     private readonly IMonitorSwitcher _monitorSwitcher;
     private readonly AppConfig _config;
     private readonly SemaphoreSlim _switchLock = new(1, 1);
+    private readonly SemaphoreSlim _pipLock = new(1, 1);
     private volatile bool _localActive;
     private volatile bool _stopped;
+    private volatile byte _pipMode = MonitorInputSource.PipOff;
+    private volatile bool _pipQueryFailed;
     private byte? _lastSetInputSource;
     private DateTime _lastSwitchTime = DateTime.MinValue;
     private readonly TimeSpan _switchCooldown = TimeSpan.FromSeconds(3);
 
     public event Action<bool>? LocalActiveChanged;
     public event Action<string>? StatusChanged;
+    public event Action<byte>? PipModeChanged;
 
     public bool IsLocalActive => _localActive;
+    public byte PipMode => _pipMode;
+    public bool IsPipActive => MonitorInputSource.IsPipActive(_pipMode);
+    public bool PipQueryFailed => _pipQueryFailed;
 
     public SwitcherEngine(IUsbMonitor usbMonitor, IMonitorSwitcher monitorSwitcher, AppConfig config)
     {
@@ -40,6 +47,8 @@ public class SwitcherEngine : IDisposable
 
         var devices = _usbMonitor.GetCurrentDevices();
         InitState(devices);
+
+        _ = RefreshPipStateAsync();
     }
 
     public void Stop()
@@ -151,6 +160,7 @@ public class SwitcherEngine : IDisposable
     {
         try
         {
+            _ = RefreshPipStateAsync();
             EvaluateState(devices);
         }
         catch (Exception ex)
@@ -200,6 +210,14 @@ public class SwitcherEngine : IDisposable
             return;
         }
 
+        if (IsPipActive)
+        {
+            Log.Debug("PiP/PBP active ({Mode}), skipping automatic input switch",
+                MonitorInputSource.GetPipModeName(_pipMode));
+            NotifyStatusChanged($"PiP/PBP active ({MonitorInputSource.GetPipModeName(_pipMode)}), auto-switch suspended");
+            return;
+        }
+
         var currentKeys = devices.Select(d => d.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var anyTrackedPresent = trackedKeys.Any(k => currentKeys.Contains(k));
 
@@ -246,6 +264,105 @@ public class SwitcherEngine : IDisposable
         _stopped = true;
         Stop();
         _switchLock.Dispose();
+        _pipLock.Dispose();
+    }
+
+    public async Task RefreshPipStateAsync()
+    {
+        if (_stopped) return;
+        if (!_pipLock.Wait(0)) return;
+        try
+        {
+            var mode = await _monitorSwitcher.GetPipModeAsync();
+            if (_stopped) return;
+
+            _pipQueryFailed = false;
+            if (mode != _pipMode)
+            {
+                _pipMode = mode;
+                Log.Information("PiP mode detected: {Mode}", MonitorInputSource.GetPipModeName(mode));
+                NotifyPipModeChanged(mode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _pipQueryFailed = true;
+            Log.Debug(ex, "PiP mode query not supported on this display");
+        }
+        finally
+        {
+            try { _pipLock.Release(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+        }
+    }
+
+    public async Task<bool> ActivatePipAsync()
+    {
+        return await SetPipModeAsync(MonitorInputSource.PipOn);
+    }
+
+    public async Task<bool> DeactivatePipAsync()
+    {
+        return await SetPipModeAsync(MonitorInputSource.PipOff);
+    }
+
+    public async Task<bool> TogglePipAsync()
+    {
+        if (IsPipActive)
+            return await DeactivatePipAsync();
+        return await ActivatePipAsync();
+    }
+
+    private async Task<bool> SetPipModeAsync(byte mode)
+    {
+        if (_stopped) return false;
+        if (!_pipLock.Wait(0)) return false;
+        try
+        {
+            NotifyStatusChanged($"Setting PiP mode to {MonitorInputSource.GetPipModeName(mode)}...");
+            Log.Information("Setting PiP mode to {Mode}", MonitorInputSource.GetPipModeName(mode));
+
+            var success = await _monitorSwitcher.SetPipModeAsync(mode);
+            if (_stopped) return false;
+
+            if (success)
+            {
+                _pipMode = MonitorInputSource.CanonicalizePipMode(_config.InputProtocol, mode);
+                _pipQueryFailed = false;
+                NotifyPipModeChanged(_pipMode);
+                NotifyStatusChanged(IsPipActive
+                    ? $"PiP/PBP active ({MonitorInputSource.GetPipModeName(_pipMode)}), auto-switch suspended"
+                    : "PiP/PBP off, auto-switch resumed");
+                Log.Information("PiP mode set to {Mode}", MonitorInputSource.GetPipModeName(_pipMode));
+            }
+            else
+            {
+                _pipQueryFailed = true;
+                NotifyStatusChanged("Failed to set PiP mode (display may not support PiP over DDC/CI)");
+                Log.Warning("Failed to set PiP mode to {Mode}", MonitorInputSource.GetPipModeName(mode));
+            }
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _pipQueryFailed = true;
+            Log.Error(ex, "Error setting PiP mode");
+            NotifyStatusChanged($"Error setting PiP mode: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            try { _pipLock.Release(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+        }
+    }
+
+    private void NotifyPipModeChanged(byte mode)
+    {
+        try { PipModeChanged?.Invoke(mode); }
+        catch (Exception ex) { Log.Error(ex, "Error invoking PipModeChanged"); }
     }
 
     private async Task SafeSwitchToLocalAsync()

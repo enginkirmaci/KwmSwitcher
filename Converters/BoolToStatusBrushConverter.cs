@@ -17,6 +17,7 @@ public class BoolToStatusBrushConverter : IValueConverter
         {
             "Local" => isLocal ? GetBrush("LocalBrush") : GetBrush("FaintForegroundBrush"),
             "Remote" => !isLocal ? GetBrush("RemoteBrush") : GetBrush("FaintForegroundBrush"),
+            "Pip" => isLocal ? GetBrush("AccentBrush") : GetBrush("BodyForegroundBrush"),
             _ => isLocal ? GetBrush("LocalBrush") : GetBrush("RemoteBrush")
         };
     }
@@ -35,7 +36,9 @@ public class BoolToStatusBrushConverter : IValueConverter
         {
             "LocalBrush" => new SolidColorBrush(Color.Parse("#22C55E")),
             "RemoteBrush" => new SolidColorBrush(Color.Parse("#8B5CF6")),
+            "AccentBrush" => new SolidColorBrush(Color.Parse("#3B82F6")),
             "FaintForegroundBrush" => new SolidColorBrush(Color.Parse("#6A6A6A")),
+            "BodyForegroundBrush" => new SolidColorBrush(Color.Parse("#DCDCDC")),
             _ => new SolidColorBrush(Colors.Gray)
         };
     }

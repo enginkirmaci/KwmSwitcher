@@ -139,6 +139,13 @@ public partial class App : Application
             catch (Exception ex) { Log.Error(ex, "Error switching to remote from tray"); }
         };
 
+        var togglePipItem = new NativeMenuItem("Toggle PiP/PBP");
+        togglePipItem.Click += async (_, _) =>
+        {
+            try { if (_engine != null) await _engine.TogglePipAsync(); }
+            catch (Exception ex) { Log.Error(ex, "Error toggling PiP from tray"); }
+        };
+
         var quitItem = new NativeMenuItem("Quit");
         quitItem.Click += (_, _) =>
         {
@@ -152,6 +159,7 @@ public partial class App : Application
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(switchLocalItem);
         menu.Items.Add(switchRemoteItem);
+        menu.Items.Add(togglePipItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quitItem);
 

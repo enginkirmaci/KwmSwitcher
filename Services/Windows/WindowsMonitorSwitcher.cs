@@ -193,7 +193,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
     {
         return await Task.Run(() =>
         {
-            var vcpCode = MonitorInputSource.VcpCode;
+            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
 
             foreach (var device in EnumerateMonitorDevices())
             {
@@ -207,7 +207,7 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
                 try
                 {
                     if (GetVcpFeatureViaIoctl(handle, vcpCode, out var currentValue))
-                        return (byte)currentValue;
+                        return MonitorInputSource.DecodeInputSource(_config.InputProtocol, (byte)currentValue);
                 }
                 finally
                 {
@@ -216,6 +216,67 @@ public class WindowsMonitorSwitcher : IMonitorSwitcher
             }
 
             return (byte)0;
+        });
+    }
+
+    public async Task<byte> GetPipModeAsync()
+    {
+        return await Task.Run(() =>
+        {
+            var vcpCode = MonitorInputSource.GetPipVcpCode(_config.InputProtocol);
+
+            foreach (var device in EnumerateMonitorDevices())
+            {
+                if (!MatchesTarget(device))
+                    continue;
+
+                var handle = OpenMonitorHandle(device.DevicePath);
+                if (handle == INVALID_HANDLE_VALUE || handle == IntPtr.Zero)
+                    continue;
+
+                try
+                {
+                    if (GetVcpFeatureViaIoctl(handle, vcpCode, out var currentValue))
+                        return MonitorInputSource.DecodePipMode(_config.InputProtocol, (byte)currentValue);
+                }
+                finally
+                {
+                    CloseHandle(handle);
+                }
+            }
+
+            return (byte)0;
+        });
+    }
+
+    public async Task<bool> SetPipModeAsync(byte mode)
+    {
+        return await Task.Run(() =>
+        {
+            var vcpCode = MonitorInputSource.GetPipVcpCode(_config.InputProtocol);
+            var value = MonitorInputSource.GetPipProtocolValue(_config.InputProtocol, mode);
+
+            foreach (var device in EnumerateMonitorDevices())
+            {
+                if (!MatchesTarget(device))
+                    continue;
+
+                var handle = OpenMonitorHandle(device.DevicePath);
+                if (handle == INVALID_HANDLE_VALUE || handle == IntPtr.Zero)
+                    continue;
+
+                try
+                {
+                    if (SetVcpFeatureViaIoctl(handle, vcpCode, value))
+                        return true;
+                }
+                finally
+                {
+                    CloseHandle(handle);
+                }
+            }
+
+            return false;
         });
     }
 
