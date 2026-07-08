@@ -1,56 +1,37 @@
-using System;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
-using Serilog;
 
 namespace KwmSwitcher.Services.Windows;
 
+/// <summary>
+/// Windows autostart via the <c>Run</c> registry key under HKCU. Error handling
+/// (try/catch + logging) is provided by <see cref="AutoStartServiceBase"/>; this
+/// class implements only the registry mechanics.
+/// </summary>
 [SupportedOSPlatform("windows")]
-public class WindowsAutoStartService : IAutoStartService
+public class WindowsAutoStartService : AutoStartServiceBase
 {
     private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "KwmSwitcher";
 
-    public bool IsEnabled()
+    protected override bool IsEnabledCore()
     {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
-            return key?.GetValue(AppName) != null;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to check autostart status");
-            return false;
-        }
+        using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
+        return key?.GetValue(AppName) != null;
     }
 
-    public void Enable()
+    protected override void EnableCore()
     {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true)
-                         ?? Registry.CurrentUser.CreateSubKey(RegistryKeyPath);
-            var execPath = Environment.ProcessPath ?? "KwmSwitcher";
-            key.SetValue(AppName, $"\"{execPath}\"");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to enable autostart");
-        }
+        using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true)
+                     ?? Registry.CurrentUser.CreateSubKey(RegistryKeyPath);
+        var execPath = System.Environment.ProcessPath ?? "KwmSwitcher";
+        key.SetValue(AppName, $"\"{execPath}\"");
     }
 
-    public void Disable()
+    protected override void DisableCore()
     {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
-            if (key?.GetValue(AppName) != null)
-                key.DeleteValue(AppName);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to disable autostart");
-        }
+        using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
+        if (key?.GetValue(AppName) != null)
+            key.DeleteValue(AppName);
     }
 }

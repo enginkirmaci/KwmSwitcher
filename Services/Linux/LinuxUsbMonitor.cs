@@ -1,40 +1,41 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using KwmSwitcher.Models;
 using Serilog;
 
 namespace KwmSwitcher.Services.Linux;
 
-public class LinuxUsbMonitor : IUsbMonitor
+/// <summary>
+/// Polls <c>/sys/bus/usb/devices</c> at a fixed interval. Diff bookkeeping and
+/// event dispatch live in <see cref="UsbMonitorBase"/>; this class only knows
+/// how to enumerate sysfs devices and when to trigger a check.
+/// </summary>
+public class LinuxUsbMonitor : UsbMonitorBase
 {
     private readonly AppConfig _config;
     private Timer? _pollTimer;
-    private HashSet<string> _lastDeviceKeys = [];
 
     public LinuxUsbMonitor(AppConfig config)
     {
         _config = config;
     }
 
-    public event Action<IEnumerable<UsbDeviceInfo>>? DevicesChanged;
-
-    public void Start()
+    public override void Start()
     {
-        _lastDeviceKeys = [..GetCurrentDevices().Select(d => d.Key)];
+        SeedBaseline();
         // Poll interval is read at start; a restart picks up any edited value.
-        _pollTimer = new Timer(Poll, null, 0, _config.PollIntervalMs);
+        _pollTimer = new Timer(_ => RaiseIfChanged(), null, 0, _config.PollIntervalMs);
     }
 
-    public void Stop()
+    public override void Stop()
     {
         _pollTimer?.Dispose();
         _pollTimer = null;
     }
 
-    public IReadOnlyList<UsbDeviceInfo> GetCurrentDevices()
+    public override IReadOnlyList<UsbDeviceInfo> GetCurrentDevices()
     {
         var devices = new List<UsbDeviceInfo>();
         var usbBase = "/sys/bus/usb/devices";
@@ -70,27 +71,5 @@ public class LinuxUsbMonitor : IUsbMonitor
         return devices;
     }
 
-    private void Poll(object? state)
-    {
-        try
-        {
-            var current = GetCurrentDevices();
-            var currentKeys = current.Select(d => d.Key).ToHashSet();
-
-            if (!currentKeys.SetEquals(_lastDeviceKeys))
-            {
-                _lastDeviceKeys = currentKeys;
-                DevicesChanged?.Invoke(current);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error in USB poll callback");
-        }
-    }
-
-    public void Dispose()
-    {
-        Stop();
-    }
+    public override void Dispose() => Stop();
 }

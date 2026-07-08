@@ -65,101 +65,64 @@ public class SwitcherEngine : IDisposable
         _usbMonitor.Stop();
     }
 
-    public async Task SwitchToLocalAsync()
+    /// <summary>Switches the monitor to the local input source.</summary>
+    public Task SwitchToLocalAsync() => SwitchInputAsync(_config.LocalInputSource, isLocal: true);
+
+    /// <summary>Switches the monitor to the remote input source.</summary>
+    public Task SwitchToRemoteAsync() => SwitchInputAsync(_config.RemoteInputSource, isLocal: false);
+
+    /// <summary>
+    /// Unified input-source switch. <paramref name="isLocal"/> selects the
+    /// target state and the human-readable label; everything else — already-on
+    /// shortcut, status notifications, logging — is identical for both sides.
+    /// </summary>
+    private async Task SwitchInputAsync(byte inputSource, bool isLocal)
     {
         if (_stopped) return;
         if (!_switchLock.Wait(0)) return;
         try
         {
-            if (_lastSetInputSource == _config.LocalInputSource)
+            var label = isLocal ? "local" : "remote";
+
+            if (_lastSetInputSource == inputSource)
             {
-                _localActive = true;
-                NotifyLocalActiveChanged(true);
-                NotifyStatusChanged($"Monitor already on {MonitorInputSource.GetName(_config.LocalInputSource)} (local)");
+                _localActive = isLocal;
+                NotifyLocalActiveChanged(isLocal);
+                NotifyStatusChanged($"Monitor already on {MonitorInputSource.GetName(inputSource)} ({label})");
                 return;
             }
 
-            NotifyStatusChanged($"Switching monitor to {MonitorInputSource.GetName(_config.LocalInputSource)}...");
-            Log.Information("Switching monitor to {Input} (local)", MonitorInputSource.GetName(_config.LocalInputSource));
+            NotifyStatusChanged($"Switching monitor to {MonitorInputSource.GetName(inputSource)}...");
+            Log.Information("Switching monitor to {Input} ({Label})", MonitorInputSource.GetName(inputSource), label);
 
-            var success = await _monitorSwitcher.SetInputSourceAsync(_config.LocalInputSource);
+            var success = await _monitorSwitcher.SetInputSourceAsync(inputSource);
 
             if (_stopped) return;
 
             if (success)
             {
-                _lastSetInputSource = _config.LocalInputSource;
-                _localActive = true;
+                _lastSetInputSource = inputSource;
+                _localActive = isLocal;
                 _lastSwitchTime = DateTime.Now;
-                NotifyLocalActiveChanged(true);
-                NotifyStatusChanged($"Monitor set to {MonitorInputSource.GetName(_config.LocalInputSource)} (local)");
-                Log.Information("Monitor switched to {Input} (local)", MonitorInputSource.GetName(_config.LocalInputSource));
+                NotifyLocalActiveChanged(isLocal);
+                NotifyStatusChanged($"Monitor set to {MonitorInputSource.GetName(inputSource)} ({label})");
+                Log.Information("Monitor switched to {Input} ({Label})", MonitorInputSource.GetName(inputSource), label);
             }
             else
             {
                 NotifyStatusChanged("Failed to switch monitor input");
-                Log.Warning("Failed to switch monitor to {Input} (local)", MonitorInputSource.GetName(_config.LocalInputSource));
+                Log.Warning("Failed to switch monitor to {Input} ({Label})", MonitorInputSource.GetName(inputSource), label);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error switching to local");
-            NotifyStatusChanged($"Error switching to local: {ex.Message}");
+            var label = isLocal ? "local" : "remote";
+            Log.Error(ex, "Error switching to {Label}", label);
+            NotifyStatusChanged($"Error switching to {label}: {ex.Message}");
         }
         finally
         {
-            try { _switchLock.Release(); }
-            catch (ObjectDisposedException) { }
-            catch (InvalidOperationException) { }
-        }
-    }
-
-    public async Task SwitchToRemoteAsync()
-    {
-        if (_stopped) return;
-        if (!_switchLock.Wait(0)) return;
-        try
-        {
-            if (_lastSetInputSource == _config.RemoteInputSource)
-            {
-                _localActive = false;
-                NotifyLocalActiveChanged(false);
-                NotifyStatusChanged($"Monitor already on {MonitorInputSource.GetName(_config.RemoteInputSource)} (remote)");
-                return;
-            }
-
-            NotifyStatusChanged($"Switching monitor to {MonitorInputSource.GetName(_config.RemoteInputSource)}...");
-            Log.Information("Switching monitor to {Input} (remote)", MonitorInputSource.GetName(_config.RemoteInputSource));
-
-            var success = await _monitorSwitcher.SetInputSourceAsync(_config.RemoteInputSource);
-
-            if (_stopped) return;
-
-            if (success)
-            {
-                _lastSetInputSource = _config.RemoteInputSource;
-                _localActive = false;
-                _lastSwitchTime = DateTime.Now;
-                NotifyLocalActiveChanged(false);
-                NotifyStatusChanged($"Monitor set to {MonitorInputSource.GetName(_config.RemoteInputSource)} (remote)");
-                Log.Information("Monitor switched to {Input} (remote)", MonitorInputSource.GetName(_config.RemoteInputSource));
-            }
-            else
-            {
-                NotifyStatusChanged("Failed to switch monitor input");
-                Log.Warning("Failed to switch monitor to {Input} (remote)", MonitorInputSource.GetName(_config.RemoteInputSource));
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error switching to remote");
-            NotifyStatusChanged($"Error switching to remote: {ex.Message}");
-        }
-        finally
-        {
-            try { _switchLock.Release(); }
-            catch (ObjectDisposedException) { }
-            catch (InvalidOperationException) { }
+            Release(_switchLock);
         }
     }
 
@@ -228,24 +191,17 @@ public class SwitcherEngine : IDisposable
         var currentKeys = devices.Select(d => d.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var anyTrackedPresent = trackedKeys.Any(k => currentKeys.Contains(k));
 
+        if (WithinCooldown())
+        {
+            Log.Debug("Ignoring switch-to-{Target} request, within cooldown period",
+                anyTrackedPresent ? "local" : "remote");
+            return;
+        }
+
         if (anyTrackedPresent && !_localActive)
-        {
-            if (DateTime.Now - _lastSwitchTime < _switchCooldown)
-            {
-                Log.Debug("Ignoring switch-to-local request, within cooldown period");
-                return;
-            }
-            _ = SafeSwitchToLocalAsync();
-        }
+            _ = SafeSwitchAsync(isLocal: true);
         else if (!anyTrackedPresent && _localActive)
-        {
-            if (DateTime.Now - _lastSwitchTime < _switchCooldown)
-            {
-                Log.Debug("Ignoring switch-to-remote request, within cooldown period");
-                return;
-            }
-            _ = SafeSwitchToRemoteAsync();
-        }
+            _ = SafeSwitchAsync(isLocal: false);
         else
         {
             NotifyStatusChanged(anyTrackedPresent
@@ -253,6 +209,8 @@ public class SwitcherEngine : IDisposable
                 : "Remote machine active, no tracked USB devices");
         }
     }
+
+    private bool WithinCooldown() => DateTime.Now - _lastSwitchTime < _switchCooldown;
 
     private void NotifyLocalActiveChanged(bool active)
     {
@@ -298,28 +256,16 @@ public class SwitcherEngine : IDisposable
         }
         finally
         {
-            try { _pipLock.Release(); }
-            catch (ObjectDisposedException) { }
-            catch (InvalidOperationException) { }
+            Release(_pipLock);
         }
     }
 
-    public async Task<bool> ActivatePipAsync()
-    {
-        return await SetPipModeAsync(MonitorInputSource.PipOn);
-    }
+    public Task<bool> ActivatePipAsync() => SetPipModeAsync(MonitorInputSource.PipOn);
 
-    public async Task<bool> DeactivatePipAsync()
-    {
-        return await SetPipModeAsync(MonitorInputSource.PipOff);
-    }
+    public Task<bool> DeactivatePipAsync() => SetPipModeAsync(MonitorInputSource.PipOff);
 
     public async Task<bool> TogglePipAsync()
-    {
-        if (IsPipActive)
-            return await DeactivatePipAsync();
-        return await ActivatePipAsync();
-    }
+        => IsPipActive ? await DeactivatePipAsync() : await ActivatePipAsync();
 
     private async Task<bool> SetPipModeAsync(byte mode)
     {
@@ -340,7 +286,7 @@ public class SwitcherEngine : IDisposable
                 NotifyPipModeChanged(_pipMode);
                 NotifyStatusChanged(IsPipActive
                     ? $"PiP/PBP active ({MonitorInputSource.GetPipModeName(_pipMode)}), auto-switch suspended"
-                    : "PiP/PBP off, auto-switch resumed");
+                    : "PiP off, auto-switch resumed");
                 Log.Information("PiP mode set to {Mode}", MonitorInputSource.GetPipModeName(_pipMode));
             }
             else
@@ -360,9 +306,7 @@ public class SwitcherEngine : IDisposable
         }
         finally
         {
-            try { _pipLock.Release(); }
-            catch (ObjectDisposedException) { }
-            catch (InvalidOperationException) { }
+            Release(_pipLock);
         }
     }
 
@@ -372,27 +316,27 @@ public class SwitcherEngine : IDisposable
         catch (Exception ex) { Log.Error(ex, "Error invoking PipModeChanged"); }
     }
 
-    private async Task SafeSwitchToLocalAsync()
+    /// <summary>Fire-and-forget wrapper that swallows unhandled exceptions.</summary>
+    private async Task SafeSwitchAsync(bool isLocal)
     {
         try
         {
-            await SwitchToLocalAsync();
+            await SwitchInputAsync(isLocal ? _config.LocalInputSource : _config.RemoteInputSource, isLocal);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Unhandled error in SafeSwitchToLocalAsync");
+            Log.Error(ex, "Unhandled error in SafeSwitchAsync (target: {Target})", isLocal ? "local" : "remote");
         }
     }
 
-    private async Task SafeSwitchToRemoteAsync()
+    /// <summary>
+    /// Releases a semaphore, tolerating disposal / over-release during shutdown.
+    /// Centralizes the try/catch previously repeated at every lock site.
+    /// </summary>
+    private static void Release(SemaphoreSlim lockHandle)
     {
-        try
-        {
-            await SwitchToRemoteAsync();
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Unhandled error in SafeSwitchToRemoteAsync");
-        }
+        try { lockHandle.Release(); }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 }

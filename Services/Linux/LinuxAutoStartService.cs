@@ -1,13 +1,17 @@
-using System;
 using System.IO;
-using Serilog;
 
 namespace KwmSwitcher.Services.Linux;
 
-public class LinuxAutoStartService : IAutoStartService
+/// <summary>
+/// Linux autostart via a FreeDesktop <c>.desktop</c> file in the user's
+/// <c>autostart</c> directory. Error handling (try/catch + logging) is provided
+/// by <see cref="AutoStartServiceBase"/>; this class implements only the
+/// filesystem mechanics.
+/// </summary>
+public class LinuxAutoStartService : AutoStartServiceBase
 {
     private static readonly string AutoStartDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
         "autostart");
 
     private static readonly string DesktopFilePath = Path.Combine(AutoStartDir, "KwmSwitcher.desktop");
@@ -24,43 +28,18 @@ NoDisplay=false
 X-GNOME-Autostart-enabled=true
 """";
 
-    public bool IsEnabled()
+    protected override bool IsEnabledCore() => File.Exists(DesktopFilePath);
+
+    protected override void EnableCore()
     {
-        try
-        {
-            return File.Exists(DesktopFilePath);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to check autostart status");
-            return false;
-        }
+        Directory.CreateDirectory(AutoStartDir);
+        var execPath = System.Environment.ProcessPath ?? "KwmSwitcher";
+        File.WriteAllText(DesktopFilePath, string.Format(DesktopFileContent, execPath));
     }
 
-    public void Enable()
+    protected override void DisableCore()
     {
-        try
-        {
-            Directory.CreateDirectory(AutoStartDir);
-            var execPath = Environment.ProcessPath ?? "KwmSwitcher";
-            File.WriteAllText(DesktopFilePath, string.Format(DesktopFileContent, execPath));
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to enable autostart");
-        }
-    }
-
-    public void Disable()
-    {
-        try
-        {
-            if (File.Exists(DesktopFilePath))
-                File.Delete(DesktopFilePath);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to disable autostart");
-        }
+        if (File.Exists(DesktopFilePath))
+            File.Delete(DesktopFilePath);
     }
 }

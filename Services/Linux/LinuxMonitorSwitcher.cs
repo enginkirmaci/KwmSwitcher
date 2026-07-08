@@ -18,118 +18,87 @@ public partial class LinuxMonitorSwitcher : IMonitorSwitcher
         _config = config;
     }
 
-    public async Task<bool> SetInputSourceAsync(byte inputSource)
+    public Task<bool> SetInputSourceAsync(byte inputSource)
+        => SetVcpAsync("input source",
+            MonitorInputSource.GetVcpCode(_config.InputProtocol),
+            MonitorInputSource.GetProtocolValue(_config.InputProtocol, inputSource),
+            MonitorInputSource.GetInputI2cSourceAddress(_config.InputProtocol));
+
+    public Task<byte> GetInputSourceAsync()
+        => GetVcpAsync("getvcp",
+            MonitorInputSource.GetVcpCode(_config.InputProtocol),
+            MonitorInputSource.GetInputI2cSourceAddress(_config.InputProtocol),
+            value => MonitorInputSource.DecodeInputSource(_config.InputProtocol, value));
+
+    public Task<byte> GetPipModeAsync()
+        => GetVcpAsync("getvcp PiP",
+            MonitorInputSource.GetPipVcpCode(_config.InputProtocol),
+            MonitorInputSource.GetPipI2cSourceAddress(_config.InputProtocol),
+            value => MonitorInputSource.DecodePipMode(_config.InputProtocol, value));
+
+    public Task<bool> SetPipModeAsync(byte mode)
+        => SetVcpAsync("setvcp PiP",
+            MonitorInputSource.GetPipVcpCode(_config.InputProtocol),
+            MonitorInputSource.GetPipProtocolValue(_config.InputProtocol, mode),
+            MonitorInputSource.GetPipI2cSourceAddress(_config.InputProtocol));
+
+    /// <summary>
+    /// Runs <c>ddcutil setvcp</c> for the given VCP code/value. <paramref name="label"/>
+    /// is used in log/error messages to distinguish input-source from PiP calls.
+    /// </summary>
+    private async Task<bool> SetVcpAsync(string label, byte vcpCode, byte value, byte i2cAddr)
     {
         try
         {
-            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
-            var value = MonitorInputSource.GetProtocolValue(_config.InputProtocol, inputSource);
-            var args = BuildSetVcpArgs(_config.InputProtocol, vcpCode, value,
-                MonitorInputSource.GetInputI2cSourceAddress(_config.InputProtocol));
-
+            var args = BuildSetVcpArgs(_config.InputProtocol, vcpCode, value, i2cAddr);
             var (success, stderr) = await RunDdcutilAsync(args);
             if (!success && !string.IsNullOrWhiteSpace(stderr))
             {
-                Log.Warning("ddcutil setvcp failed: {Stderr}", stderr.Trim());
-                Console.Error.WriteLine($"ddcutil setvcp failed: {stderr.Trim()}");
+                Log.Warning("ddcutil {Label} failed: {Stderr}", label, stderr.Trim());
+                Console.Error.WriteLine($"ddcutil {label} failed: {stderr.Trim()}");
             }
             return success;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to set input source");
-            Console.Error.WriteLine($"Failed to set input source: {ex.Message}");
+            Log.Error(ex, "Failed to {Label}", label);
+            Console.Error.WriteLine($"Failed to {label}: {ex.Message}");
             return false;
         }
     }
 
-    public async Task<byte> GetInputSourceAsync()
+    /// <summary>
+    /// Runs <c>ddcutil getvcp</c> for the given VCP code, parses the
+    /// <c>Incoming</c> value, and applies <paramref name="decode"/>. Returns 0
+    /// on any failure. <paramref name="label"/> distinguishes input-source from
+    /// PiP calls in log messages.
+    /// </summary>
+    private async Task<byte> GetVcpAsync(string label, byte vcpCode, byte i2cAddr, Func<byte, byte> decode)
     {
         try
         {
-            var vcpCode = MonitorInputSource.GetVcpCode(_config.InputProtocol);
-            var args = BuildGetVcpArgs(_config.InputProtocol, vcpCode,
-                MonitorInputSource.GetInputI2cSourceAddress(_config.InputProtocol));
-
+            var args = BuildGetVcpArgs(_config.InputProtocol, vcpCode, i2cAddr);
             var (success, stdout, stderr) = await RunDdcutilCaptureAsync(args);
             if (!success)
             {
                 if (!string.IsNullOrWhiteSpace(stderr))
-                    Log.Warning("ddcutil getvcp failed: {Stderr}", stderr.Trim());
+                    Log.Warning("ddcutil {Label} failed: {Stderr}", label, stderr.Trim());
                 return 0;
             }
 
             var parsed = TryParseIncomingValue(stdout);
             if (!parsed.HasValue)
             {
-                Log.Warning("ddcutil getvcp returned unparsable output: {Stdout}", stdout.Trim());
+                Log.Warning("ddcutil {Label} returned unparsable output: {Stdout}", label, stdout.Trim());
                 return 0;
             }
 
-            return MonitorInputSource.DecodeInputSource(_config.InputProtocol, parsed.Value);
+            return decode(parsed.Value);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to get input source");
-            Console.Error.WriteLine($"Failed to get input source: {ex.Message}");
+            Log.Error(ex, "Failed to run ddcutil {Label}", label);
             return 0;
-        }
-    }
-
-    public async Task<byte> GetPipModeAsync()
-    {
-        try
-        {
-            var vcpCode = MonitorInputSource.GetPipVcpCode(_config.InputProtocol);
-            var args = BuildGetVcpArgs(_config.InputProtocol, vcpCode,
-                MonitorInputSource.GetPipI2cSourceAddress(_config.InputProtocol));
-
-            var (success, stdout, stderr) = await RunDdcutilCaptureAsync(args);
-            if (!success)
-            {
-                if (!string.IsNullOrWhiteSpace(stderr))
-                    Log.Warning("ddcutil getvcp PiP failed: {Stderr}", stderr.Trim());
-                return 0;
-            }
-
-            var parsed = TryParseIncomingValue(stdout);
-            if (!parsed.HasValue)
-            {
-                Log.Warning("ddcutil getvcp PiP returned unparsable output: {Stdout}", stdout.Trim());
-                return 0;
-            }
-
-            return MonitorInputSource.DecodePipMode(_config.InputProtocol, parsed.Value);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to get PiP mode");
-            return 0;
-        }
-    }
-
-    public async Task<bool> SetPipModeAsync(byte mode)
-    {
-        try
-        {
-            var vcpCode = MonitorInputSource.GetPipVcpCode(_config.InputProtocol);
-            var value = MonitorInputSource.GetPipProtocolValue(_config.InputProtocol, mode);
-            var args = BuildSetVcpArgs(_config.InputProtocol, vcpCode, value,
-                MonitorInputSource.GetPipI2cSourceAddress(_config.InputProtocol));
-
-            var (success, stderr) = await RunDdcutilAsync(args);
-            if (!success && !string.IsNullOrWhiteSpace(stderr))
-            {
-                Log.Warning("ddcutil setvcp PiP failed: {Stderr}", stderr.Trim());
-                Console.Error.WriteLine($"ddcutil setvcp PiP failed: {stderr.Trim()}");
-            }
-            return success;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to set PiP mode");
-            Console.Error.WriteLine($"Failed to set PiP mode: {ex.Message}");
-            return false;
         }
     }
 
@@ -231,6 +200,11 @@ public partial class LinuxMonitorSwitcher : IMonitorSwitcher
         RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex IncomingValueRegex();
 
+    /// <summary>
+    /// Runs <c>ddcutil</c> with the given args, capturing stdout and stderr.
+    /// Both streams are always redirected so callers can pick whichever they
+    /// need (writes discard stdout, reads discard stderr implicitly).
+    /// </summary>
     private static async Task<(bool Success, string Stdout, string Stderr)> RunDdcutilCaptureAsync(string arguments)
     {
         var psi = new ProcessStartInfo("ddcutil", arguments)
@@ -251,24 +225,10 @@ public partial class LinuxMonitorSwitcher : IMonitorSwitcher
         return (process.ExitCode == 0, await stdoutTask, await stderrTask);
     }
 
+    /// <summary>Variant for writes that only need stderr. Delegates to the capture helper.</summary>
     private static async Task<(bool Success, string Stderr)> RunDdcutilAsync(string arguments)
     {
-        var psi = new ProcessStartInfo("ddcutil", arguments)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(psi);
-        if (process == null)
-            return (false, "Failed to start ddcutil process");
-
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var stderr = await stderrTask;
-
-        return (process.ExitCode == 0, stderr);
+        var (success, _, stderr) = await RunDdcutilCaptureAsync(arguments).ConfigureAwait(false);
+        return (success, stderr);
     }
 }
