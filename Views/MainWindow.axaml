@@ -63,12 +63,19 @@
                             Text="Settings" />
                     </StackPanel>
                 </Button>
-                <TextBlock
-                    VerticalAlignment="Center"
-                    FontSize="13"
-                    FontWeight="SemiBold"
-                    Foreground="{DynamicResource SubtitleForegroundBrush}"
-                    Text="KWM Switcher" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Image
+                        Width="18"
+                        Height="18"
+                        VerticalAlignment="Center"
+                        Source="/Assets/logo.png" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource SubtitleForegroundBrush}"
+                        Text="KWM Switcher" />
+                </StackPanel>
             </DockPanel>
         </Border>
 
