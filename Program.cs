@@ -1,7 +1,6 @@
 ﻿using Avalonia;
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using KwmSwitcher.Infrastructure.Logging;
 using Serilog;
 
@@ -20,11 +19,6 @@ sealed class Program
         try
         {
             Log.Debug("Starting KwmSwitcher application");
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                InstallLinuxSignalHandlers();
-            }
 
             BuildAvaloniaApp()
                 .StartWithClassicDesktopLifetime(args);
@@ -59,22 +53,6 @@ sealed class Program
 
             File.AppendAllText(CrashLogPath,
                 $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
-        }
-        catch { }
-    }
-
-    private static void InstallLinuxSignalHandlers()
-    {
-        try
-        {
-            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
-            {
-                try
-                {
-                    Log.Information("Application process exiting normally");
-                }
-                catch { }
-            };
         }
         catch { }
     }

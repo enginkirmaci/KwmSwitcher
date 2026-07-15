@@ -13,7 +13,7 @@ public static class LogHelper
     public static string LogFilePath => _logFilePath ??= Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "KwmSwitcher",
-        $"kwmswitcher-{DateTime.Now:yyyyMMdd}.log");
+        "kwmswitcher.log");
 
     public static void Initialize()
     {
@@ -23,7 +23,7 @@ public static class LogHelper
 
         Directory.CreateDirectory(logDir);
 
-        _logFilePath = Path.Combine(logDir, $"kwmswitcher-{DateTime.Now:yyyyMMdd}.log");
+        _logFilePath = Path.Combine(logDir, "kwmswitcher.log");
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
@@ -31,7 +31,9 @@ public static class LogHelper
                 _logFilePath,
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7,
-                flushToDiskInterval: TimeSpan.FromSeconds(5),
+                // Keep the buffer short so a hard crash loses at most ~1s of
+                // log lines instead of up to 5s.
+                flushToDiskInterval: TimeSpan.FromSeconds(1),
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
@@ -53,10 +55,13 @@ public static class LogHelper
 
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            // Log the error but DO NOT CloseAndFlush here: disposing the shared
+            // logger on a single unobserved task error would make every later
+            // Log.* call throw ObjectDisposedException, silently swallowing the
+            // real crash. Flush only on true process termination.
             try
             {
                 Log.Error(e.Exception, "Unobserved task exception");
-                Log.CloseAndFlush();
             }
             catch { }
             e.SetObserved();
@@ -89,14 +94,13 @@ public static class LogHelper
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "KwmSwitcher", "crash.log");
 
-        Action<string> writeCrashLog = signal =>
+        void HandleSignal(string signal)
         {
             try
             {
                 var msg = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Process killed by signal: {signal}";
                 File.AppendAllText(crashLogPath, msg + Environment.NewLine);
                 Log.Fatal("Process killed by signal: {Signal}", signal);
-                Log.CloseAndFlush();
             }
             catch
             {
@@ -108,7 +112,35 @@ public static class LogHelper
                 }
                 catch { }
             }
-        };
+            finally
+            {
+                Log.CloseAndFlush();
+            }
+        }
+
+        // Register the signals a tray app actually receives on logout/shutdown
+        // (AppDomain.ProcessExit does NOT fire for these). Without this, the
+        // process simply vanishes with no log trail.
+        foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGHUP })
+        {
+            try
+            {
+                PosixSignalRegistration.Create(signal, ctx =>
+                {
+                    HandleSignal(ctx.Signal.ToString());
+                    ctx.Cancel = false; // let the default termination proceed
+                });
+            }
+            catch { }
+        }
+
+        // NOTE: fatal signals (SIGSEGV/SIGABRT/SIGBUS/SIGFPE/SIGILL) are NOT
+        // in the PosixSignal enum — the .NET runtime owns them and they can't
+        // be safely intercepted from managed code. Instead we redirect fd 2
+        // (stderr) to a file below, so the runtime's own native-crash dump
+        // ("Fatal error. Internal CLR error." + stack) is captured rather than
+        // lost to the void of a detached tray app.
+        RedirectStderrToCrashLog();
 
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
@@ -120,4 +152,44 @@ public static class LogHelper
             catch { }
         };
     }
+
+    /// <summary>
+    /// Redirects the OS-level stderr (fd 2) to <c>stderr.log</c> next to the
+    /// other logs. A detached tray app has no terminal, so without this the
+    /// .NET runtime's native-crash dump ("Fatal error. Internal CLR error."
+    /// plus a stack trace, written on SIGSEGV/SIGABRT/...) and any
+    /// <c>Console.Error</c> output vanishes. Reopening the fd in append mode
+    /// at the libc level (not just <c>Console.SetError</c>) is what captures
+    /// the runtime's own unmanaged writes.
+    /// </summary>
+    private static void RedirectStderrToCrashLog()
+    {
+        try
+        {
+            var stderrLogPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "KwmSwitcher", "stderr.log");
+
+            // O_WRONLY|O_CREAT|O_APPEND = 0x1 | 0x40 | 0x400 on Linux.
+            const int O_WRONLY = 0x1;
+            const int O_CREAT  = 0x40;
+            const int O_APPEND = 0x400;
+            var fd = open(stderrLogPath, O_WRONLY | O_CREAT | O_APPEND, 0x1B6 /* 0644 */);
+            if (fd >= 0)
+            {
+                dup2(fd, 2);   // point fd 2 (stderr) at our file
+                close(fd);
+            }
+        }
+        catch { }
+    }
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int open(string path, int flags, int mode);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int dup2(int oldfd, int newfd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int close(int fd);
 }

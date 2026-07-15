@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using KwmSwitcher.Models;
 using Serilog;
@@ -12,6 +13,22 @@ namespace KwmSwitcher.Services.Linux;
 public partial class LinuxMonitorSwitcher : IMonitorSwitcher
 {
     private readonly AppConfig _config;
+
+    /// <summary>
+    /// Serializes every <c>ddcutil</c> invocation. DDC/CI talks to a single
+    /// i2c bus; concurrent getvcp/setvcp/detect calls contend for it and are
+    /// the most plausible cause of native i2c faults when the monitor is
+    /// mid-transition (e.g. right after a KVM switch). This lock guarantees
+    /// only one ddcutil process runs at a time.
+    /// </summary>
+    private readonly SemaphoreSlim _ddcutilBusLock = new(1, 1);
+
+    /// <summary>
+    /// Hard deadline for any single ddcutil call. ddcutil normally completes
+    /// in well under 10s; this reaps wedged processes (wedged i2c bus after
+    /// monitor unplug/replug) instead of letting the await hang forever.
+    /// </summary>
+    private static readonly TimeSpan DdcutilTimeout = TimeSpan.FromSeconds(15);
 
     public LinuxMonitorSwitcher(AppConfig config)
     {
@@ -204,29 +221,69 @@ public partial class LinuxMonitorSwitcher : IMonitorSwitcher
     /// Runs <c>ddcutil</c> with the given args, capturing stdout and stderr.
     /// Both streams are always redirected so callers can pick whichever they
     /// need (writes discard stdout, reads discard stderr implicitly).
+    ///
+    /// The call is serialized across all ddcutil invocations via
+    /// <see cref="_ddcutilBusLock"/> (the i2c bus can't serve concurrent
+    /// requests), bounded by <see cref="DdcutilTimeout"/> so a wedged process
+    /// is killed rather than awaited forever, and the child is always reaped
+    /// in <c>finally</c> so no orphaned ddcutil survives.
     /// </summary>
-    private static async Task<(bool Success, string Stdout, string Stderr)> RunDdcutilCaptureAsync(string arguments)
+    private async Task<(bool Success, string Stdout, string Stderr)> RunDdcutilCaptureAsync(string arguments)
     {
-        var psi = new ProcessStartInfo("ddcutil", arguments)
+        await _ddcutilBusLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            var psi = new ProcessStartInfo("ddcutil", arguments)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-        using var process = Process.Start(psi);
-        if (process == null)
-            return (false, "", "Failed to start ddcutil process");
+            using var process = Process.Start(psi);
+            if (process == null)
+                return (false, "", "Failed to start ddcutil process");
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return (process.ExitCode == 0, await stdoutTask, await stderrTask);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            using var cts = new CancellationTokenSource(DdcutilTimeout);
+            bool timedOut = false;
+            try
+            {
+                await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                timedOut = true;
+            }
+
+            // Reap the child (and any helpers it spawned) if it's still alive —
+            // covers both the timeout path and any unexpected still-running case.
+            if (!process.HasExited)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch { /* process may have exited between the check and Kill */ }
+            }
+
+            if (timedOut)
+            {
+                Log.Warning("ddcutil timed out after {Seconds}s and was killed: {Args}",
+                    DdcutilTimeout.TotalSeconds, arguments);
+                return (false, "", $"ddcutil timed out after {DdcutilTimeout.TotalSeconds}s");
+            }
+
+            return (process.ExitCode == 0, await stdoutTask, await stderrTask);
+        }
+        finally
+        {
+            _ddcutilBusLock.Release();
+        }
     }
 
     /// <summary>Variant for writes that only need stderr. Delegates to the capture helper.</summary>
-    private static async Task<(bool Success, string Stderr)> RunDdcutilAsync(string arguments)
+    private async Task<(bool Success, string Stderr)> RunDdcutilAsync(string arguments)
     {
         var (success, _, stderr) = await RunDdcutilCaptureAsync(arguments).ConfigureAwait(false);
         return (success, stderr);
