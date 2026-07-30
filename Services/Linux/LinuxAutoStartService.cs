@@ -20,7 +20,7 @@ public class LinuxAutoStartService : AutoStartServiceBase
 [Desktop Entry]
 Type=Application
 Name=KWM Switcher
-Exec={0}
+Exec={0} --supervise
 Icon=KwmSwitcher
 Comment=USB KVM switcher for monitor input
 Hidden=false

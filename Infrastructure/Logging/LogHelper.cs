@@ -45,6 +45,12 @@ public static class LogHelper
                     Log.Fatal(ex, "Unhandled AppDomain exception");
                 else
                     Log.Fatal("Unhandled AppDomain exception: {Message}", e.ExceptionObject);
+
+                // Mark the process exit as a crash so an external supervisor
+                // (see AppSupervisor) treats this as a relaunchable failure.
+                // Native-signal crashes are already non-zero by runtime
+                // behavior; this makes the managed path deterministic.
+                Environment.ExitCode = 1;
             }
             catch { }
             finally
