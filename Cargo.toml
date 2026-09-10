@@ -1,0 +1,26 @@
+[package]
+name = "kwmswitcher"
+version = "0.3.0"
+edition = "2021"
+description = "USB KVM switcher that flips monitor inputs over DDC/CI"
+license = "MIT"
+
+[[bin]]
+name = "kwmswitcher"
+path = "src/main.rs"
+
+[dependencies]
+gpui-kit = "0.6.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+chrono = "0.4"
+log = "0.4"
+signal-hook = "0.3"
+libc = "0.2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+ksni = { version = "0.3", default-features = false, features = ["blocking", "async-io"] }
+
+[profile.release]
+lto = "thin"
+strip = true
