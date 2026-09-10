@@ -1,0 +1,86 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug kwmswitcher (GUI)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/kwmswitcher",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "KWMSWITCHER_KEEP_STDERR": "1",
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "rust: build debug",
+            "sourceLanguages": ["rust"]
+        },
+        {
+            "name": "Debug supervisor mode",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/kwmswitcher",
+            "args": ["--supervise"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "KWMSWITCHER_KEEP_STDERR": "1",
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "rust: build debug",
+            "sourceLanguages": ["rust"],
+            "//": "Debugs the supervisor process itself; the supervised child is a separate non-debugged process. Use 'Attach to running kwmswitcher' to debug the child."
+        },
+        {
+            "name": "Crash test (native abort)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/kwmswitcher",
+            "args": ["--crash-test", "native"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "KWMSWITCHER_KEEP_STDERR": "1",
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "rust: build debug",
+            "sourceLanguages": ["rust"],
+            "//": "Calls abort(); LLDB stops on SIGABRT — continue or detach to let it die."
+        },
+        {
+            "name": "Crash test (managed panic)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/kwmswitcher",
+            "args": ["--crash-test", "managed"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "KWMSWITCHER_KEEP_STDERR": "1",
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "rust: build debug",
+            "sourceLanguages": ["rust"],
+            "//": "Panics on a background thread; the panic hook exits(1)."
+        },
+        {
+            "name": "Debug unit tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/kwmswitcher-tests",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "rust: build test binary",
+            "sourceLanguages": ["rust"],
+            "//": "Set args to a test filter (e.g. [\"config::\"]) to run a subset."
+        },
+        {
+            "name": "Attach to running kwmswitcher",
+            "type": "lldb",
+            "request": "attach",
+            "pid": "${command:pickProcess}",
+            "sourceLanguages": ["rust"],
+            "//": "Attach to the supervised child (start the app with --supervise from a terminal first)."
+        }
+    ]
+}

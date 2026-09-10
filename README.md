@@ -83,6 +83,23 @@ src/
   ui/              gpui-kit UI: bridge, main window, settings window, assets
 ```
 
+## Debugging in VS Code
+
+Install the recommended extensions (CodeLLDB + rust-analyzer; VS Code offers
+them on open). The provided debug profiles all live in `.vscode/launch.json`:
+
+| Profile | What it does |
+|---|---|
+| **Debug kwmswitcher (GUI)** | Builds and launches the app under LLDB |
+| **Debug supervisor mode** | Launches `--supervise` (debugs the supervisor; use Attach for the child) |
+| **Crash test (native / managed)** | Runs the crash hooks so you can watch the fault in the debugger |
+| **Debug unit tests** | Builds the test harness binary and runs it under LLDB; set `args` to a filter like `["config::"]` for a subset |
+| **Attach to running kwmswitcher** | Attaches to a running instance (e.g. the supervised child) |
+
+Launch profiles set `KWMSWITCHER_KEEP_STDERR=1`, which keeps OS stderr
+attached to the debugger instead of redirecting it to `stderr.log`, so panic
+backtraces show up in the debug console.
+
 ## Notes
 
 - The Rust rewrite is Linux-only (the C# version also supported Windows via

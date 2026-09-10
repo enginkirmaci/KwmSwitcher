@@ -1,0 +1,37 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "rust: build debug",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["build"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$rustc"],
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "label": "rust: build test binary",
+            "type": "shell",
+            "command": "sh",
+            "args": [
+                "-c",
+                "cargo test --no-run && test_bin=$(ls -t target/debug/deps/kwmswitcher-* 2>/dev/null | grep -v '\\.d$' | head -1) && ln -sf \"$PWD/$test_bin\" target/debug/kwmswitcher-tests && echo \"test binary: $test_bin\""
+            ],
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "rust: run tests",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["test"],
+            "group": "test",
+            "problemMatcher": ["$rustc"]
+        }
+    ]
+}

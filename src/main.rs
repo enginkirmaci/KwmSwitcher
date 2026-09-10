@@ -29,7 +29,12 @@ fn main() {
     }
 
     logging::init(paths::log_file(), log::LevelFilter::Debug);
-    logging::redirect_stderr(&paths::stderr_log_file());
+    // A detached tray app has no terminal; but under a debugger (set
+    // KWMSWITCHER_KEEP_STDERR=1) keep OS stderr so panic backtraces reach
+    // the debug console instead of the log file.
+    if std::env::var_os("KWMSWITCHER_KEEP_STDERR").is_none() {
+        logging::redirect_stderr(&paths::stderr_log_file());
+    }
     install_panic_hook();
 
     // Diagnostic hook: crash on demand so the supervisor's relaunch behavior
