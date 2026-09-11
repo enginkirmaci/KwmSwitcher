@@ -26,6 +26,9 @@ pub enum UiCommand {
 pub struct TrayState {
     pub status: String,
     pub local_active: bool,
+    /// False while no tracked devices are configured: the app has never
+    /// switched, so the active side is unknown.
+    pub has_tracked: bool,
     pub pip_active: bool,
     pub pip_label: String,
 }
@@ -99,6 +102,13 @@ impl Tray for KwmTray {
         Status::Passive
     }
 
+    /// A left click on the icon opens the main window; the context menu
+    /// stays on right click (`MENU_ON_ACTIVATE` is false, so activation is
+    /// not hijacked into opening the menu).
+    fn activate(&mut self, _x: i32, _y: i32) {
+        let _ = self.ui_tx.send(UiCommand::OpenMainWindow);
+    }
+
     fn category(&self) -> Category {
         Category::Hardware
     }
@@ -115,7 +125,12 @@ impl Tray for KwmTray {
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let state = self.state.lock().map(|s| s.clone()).unwrap_or_default();
-        let side = if state.local_active { "Local" } else { "Remote" };
+        let side = match state.has_tracked {
+            true if state.local_active => "Local",
+            true => "Remote",
+            // Nothing configured: the app has not switched yet.
+            false => "Unknown",
+        };
 
         vec![
             MenuItem::Standard(menu_item("Main Window", &self.engine_tx, &self.ui_tx, MenuAction::Ui(UiCommand::OpenMainWindow))),
@@ -196,6 +211,7 @@ pub fn spawn(
     let state = Arc::new(Mutex::new(TrayState {
         status: "Starting...".into(),
         local_active: false,
+        has_tracked: false,
         pip_active: false,
         pip_label: "PiP".into(),
     }));

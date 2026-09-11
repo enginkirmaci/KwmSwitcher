@@ -4,7 +4,6 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::group_box::GroupBox;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::searchable_list::{
@@ -321,11 +320,11 @@ impl Render for SettingsWindowView {
                         .child(
                             Icon::new(IconName::Settings)
                                 .small()
-                                .text_color(theme.muted_foreground),
+                                .text_color(theme.accent),
                         )
                         .child(
                             div()
-                                .text_size(px(13.))
+                                .text_size(px(15.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child("Settings"),
                         ),
@@ -335,130 +334,161 @@ impl Render for SettingsWindowView {
                 div()
                     .id("settings-scroll")
                     .flex_1()
+                    .min_h_0()
                     .overflow_y_scrollbar()
                     .px_5()
                     .py_4()
                     .child(
                         v_flex()
                             .gap_4()
-                            // Tracked USB devices.
+                            // Tracked USB devices — the core feature, first.
+                            // Card styling mirrors the main window's device
+                            // cards.
                             .child(
-                                GroupBox::new().title("Tracked USB Devices").child(
-                                    v_flex()
-                                        .gap_2()
-                                        .child(
-                                            div()
-                                                .text_size(px(12.))
-                                                .text_color(theme.muted_foreground)
-                                                .child(
-                                                    "Devices connected through the USB switch. \
-                                                     When any of these appear, the monitor switches \
-                                                     to the local input.",
-                                                ),
-                                        )
-                                        .child(
-                                            h_flex()
-                                                .justify_end()
-                                                .child(
-                                                    Button::new("refresh-devices")
-                                                        .icon(IconName::RefreshCw)
-                                                        .label("Refresh")
-                                                        .ghost()
-                                                        .small()
-                                                        .on_click(cx.listener(|this, _, _, cx| {
-                                                            this.devices =
-                                                                Self::collect_devices(&this.config);
-                                                            cx.notify();
-                                                        })),
-                                                ),
-                                        )
-                                        .children(device_rows),
-                                ),
+                                v_flex()
+                                    .gap_3()
+                                    .rounded(theme.radius_lg)
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .bg(theme.secondary)
+                                    .p_4()
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .child(
+                                                div()
+                                                    .text_size(px(14.))
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .child("Tracked USB Devices"),
+                                            )
+                                            .child(
+                                                Button::new("refresh-devices")
+                                                    .icon(IconName::RefreshCw)
+                                                    .label("Refresh")
+                                                    .secondary()
+                                                    .outline()
+                                                    .rounded(px(9999.))
+                                                    .small()
+                                                    .on_click(cx.listener(|this, _, _, cx| {
+                                                        this.devices =
+                                                            Self::collect_devices(&this.config);
+                                                        cx.notify();
+                                                    })),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .text_color(theme.muted_foreground)
+                                            .child(
+                                                "Devices connected through the USB switch. \
+                                                 When any of these appear, the monitor switches \
+                                                 to the local input.",
+                                            ),
+                                    )
+                                    .children(device_rows),
                             )
-                            // Input sources.
+                            // Monitor: input sources, protocol and target
+                            // display live in one card — they configure the
+                            // same thing.
                             .child(
-                                GroupBox::new().title("Monitor Input").child(
-                                    v_flex()
-                                        .gap_3()
-                                        .child(self.select_row(
-                                            "Local input (this machine)",
-                                            Select::new(&self.local_input).id("local-input"),
-                                        ))
-                                        .child(self.select_row(
-                                            "Remote input (other machine)",
-                                            Select::new(&self.remote_input).id("remote-input"),
-                                        ))
-                                        .child(self.select_row(
-                                            "Input protocol",
-                                            Select::new(&self.protocol).id("protocol"),
-                                        ))
-                                        .child(
-                                            div()
-                                                .text_size(px(12.))
-                                                .text_color(theme.muted_foreground)
-                                                .child(
-                                                    "Use the LG protocol if your monitor ignores \
-                                                     standard DDC/CI input switching.",
-                                                ),
-                                        ),
-                                ),
-                            )
-                            // Target monitor.
-                            .child(
-                                GroupBox::new().title("Target Monitor").child(
-                                    v_flex()
-                                        .gap_2()
-                                        .child(self.select_row(
-                                            "Monitor",
-                                            Select::new(&self.target_monitor)
-                                                .id("target-monitor")
-                                                .placeholder("All monitors")
-                                                .cleanable(true),
-                                        ))
-                                        .child(
-                                            div()
-                                                .text_size(px(12.))
-                                                .text_color(theme.muted_foreground)
-                                                .child(
-                                                    "Leave empty to try all monitors. Pick your \
-                                                     external display on laptops to avoid switching \
-                                                     the built-in panel.",
-                                                ),
-                                        ),
-                                ),
+                                v_flex()
+                                    .gap_3()
+                                    .rounded(theme.radius_lg)
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .bg(theme.secondary)
+                                    .p_4()
+                                    .child(
+                                        div()
+                                            .text_size(px(14.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child("Monitor"),
+                                    )
+                                    .child(self.select_row(
+                                        "Local input (this machine)",
+                                        Select::new(&self.local_input).id("local-input"),
+                                    ))
+                                    .child(self.select_row(
+                                        "Remote input (other machine)",
+                                        Select::new(&self.remote_input).id("remote-input"),
+                                    ))
+                                    .child(self.select_row(
+                                        "Input protocol",
+                                        Select::new(&self.protocol).id("protocol"),
+                                    ))
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .text_color(theme.muted_foreground)
+                                            .child(
+                                                "Use the LG protocol if your monitor ignores \
+                                                 standard DDC/CI input switching.",
+                                            ),
+                                    )
+                                    .child(div().h(px(1.)).w_full().bg(theme.border))
+                                    .child(self.select_row(
+                                        "Target monitor",
+                                        Select::new(&self.target_monitor)
+                                            .id("target-monitor")
+                                            .placeholder("All monitors")
+                                            .cleanable(true),
+                                    ))
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .text_color(theme.muted_foreground)
+                                            .child(
+                                                "Leave empty to try all monitors. Pick your \
+                                                 external display on laptops to avoid switching \
+                                                 the built-in panel.",
+                                            ),
+                                    ),
                             )
                             // Startup.
                             .child(
-                                GroupBox::new().title("Startup").child(
-                                    v_flex()
-                                        .gap_3()
-                                        .child(
-                                            Switch::new("start-minimized")
-                                                .label("Start minimized to tray")
-                                                .checked(self.start_minimized)
-                                                .on_change(cx.listener(
-                                                    |this, value: &bool, _, cx| {
-                                                        this.start_minimized = *value;
-                                                        cx.notify();
-                                                    },
-                                                )),
-                                        )
-                                        .child(
-                                            Switch::new("autostart")
-                                                .label("Start automatically on login")
-                                                .checked(self.autostart)
-                                                .on_change(cx.listener(
-                                                    |this, value: &bool, _, cx| {
-                                                        this.autostart = *value;
-                                                        cx.notify();
-                                                    },
-                                                )),
-                                        ),
-                                ),
+                                v_flex()
+                                    .gap_3()
+                                    .rounded(theme.radius_lg)
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .bg(theme.secondary)
+                                    .p_4()
+                                    .child(
+                                        div()
+                                            .text_size(px(14.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child("Startup"),
+                                    )
+                                    .child(
+                                        Switch::new("start-minimized")
+                                            .label("Start minimized to tray")
+                                            .checked(self.start_minimized)
+                                            .on_change(cx.listener(
+                                                |this, value: &bool, _, cx| {
+                                                    this.start_minimized = *value;
+                                                    cx.notify();
+                                                },
+                                            )),
+                                    )
+                                    .child(
+                                        Switch::new("autostart")
+                                            .label("Start automatically on login")
+                                            .checked(self.autostart)
+                                            .on_change(cx.listener(
+                                                |this, value: &bool, _, cx| {
+                                                    this.autostart = *value;
+                                                    cx.notify();
+                                                },
+                                            )),
+                                    ),
                             ),
                     ),
             )
-            // Footer.
+            // Footer: main-window styling — right-aligned soft pill actions.
+            // Cancel discards changes and closes the window; Save persists
+            // and closes.
             .child(
                 h_flex()
                     .items_center()
@@ -471,12 +501,15 @@ impl Render for SettingsWindowView {
                     .child(
                         Button::new("cancel")
                             .ghost()
+                            .rounded(px(9999.))
                             .label("Cancel")
                             .on_click(|_, window, _| window.remove_window()),
                     )
                     .child(
                         Button::new("save")
                             .primary()
+                            .outline()
+                            .rounded(px(9999.))
                             .label("Save")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.save(window, cx);
@@ -498,6 +531,7 @@ impl SettingsWindowView {
             .child(select.w(px(260.)))
     }
 
+    /// Persists the form and closes the settings window.
     fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let protocol = self
             .protocol

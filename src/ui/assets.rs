@@ -45,6 +45,17 @@ fn embedded(path: &str) -> Option<&'static [u8]> {
             env!("CARGO_MANIFEST_DIR"),
             "/assets/icons/arrow-right.svg"
         ))),
+        "icons/arrow-left-right.svg" => Some(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/icons/arrow-left-right.svg"
+        ))),
+        "icons/columns-2.svg" => {
+            Some(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons/columns-2.svg")))
+        }
+        "icons/toggle-left.svg" => Some(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/icons/toggle-left.svg"
+        ))),
         "icons/settings.svg" => {
             Some(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons/settings.svg")))
         }

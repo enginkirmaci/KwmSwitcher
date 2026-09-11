@@ -20,6 +20,8 @@ pub enum EngineCommand {
     SwitchToLocal,
     SwitchToRemote,
     TogglePip,
+    /// Set the PiP mode explicitly (used by the PiP / Single buttons).
+    SetPip(u8),
     RefreshPip,
     Stop,
 }
@@ -29,6 +31,16 @@ pub enum UiEvent {
     Status(String),
     LocalActive(bool),
     PipChanged { mode: u8, query_failed: bool },
+    /// The configured tracked devices and whether each is currently
+    /// attached, so the UI can show the list on hover.
+    TrackedDevices(Vec<TrackedDeviceInfo>),
+}
+
+/// One tracked device as shown in the UI: display name and attach state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrackedDeviceInfo {
+    pub name: String,
+    pub present: bool,
 }
 
 const SWITCH_COOLDOWN: Duration = Duration::from_secs(3);
@@ -47,8 +59,8 @@ impl EngineHandle {
         let _ = self.tx.send(EngineCommand::SwitchToRemote);
     }
 
-    pub fn toggle_pip(&self) {
-        let _ = self.tx.send(EngineCommand::TogglePip);
+    pub fn set_pip(&self, mode: u8) {
+        let _ = self.tx.send(EngineCommand::SetPip(mode));
     }
 
     pub fn refresh_pip(&self) {
@@ -159,6 +171,9 @@ fn run(
                 };
                 set_pip_mode(&config, &ddc, &mut state, &ui_tx, target);
             }
+            EngineCommand::SetPip(mode) => {
+                set_pip_mode(&config, &ddc, &mut state, &ui_tx, mode);
+            }
             EngineCommand::RefreshPip => {
                 refresh_pip_state(&ddc, &mut state, &ui_tx);
             }
@@ -175,15 +190,15 @@ fn init_state(config: &SharedConfig, devices: &[UsbDevice], ui_tx: &Sender<UiEve
         .iter()
         .map(|k| k.to_lowercase())
         .collect();
+    let present_list = tracked_device_list(devices, &tracked);
 
+    notify(ui_tx, UiEvent::TrackedDevices(present_list.clone()));
     if tracked.is_empty() {
         set_status(ui_tx, "No tracked devices configured. Open settings to select USB devices.");
         return;
     }
 
-    let any_present = devices
-        .iter()
-        .any(|d| tracked.contains(&d.key().to_lowercase()));
+    let any_present = present_list.iter().filter(|d| d.present).count() > 0;
     if any_present {
         set_status(ui_tx, "Local machine active, tracked USB devices detected");
         notify(ui_tx, UiEvent::LocalActive(true));
@@ -191,6 +206,33 @@ fn init_state(config: &SharedConfig, devices: &[UsbDevice], ui_tx: &Sender<UiEve
         set_status(ui_tx, "Remote machine active, no tracked USB devices");
         notify(ui_tx, UiEvent::LocalActive(false));
     }
+}
+
+/// The tracked keys resolved against the currently attached devices:
+/// present devices keep their description, absent ones fall back to the key.
+fn tracked_device_list(devices: &[UsbDevice], tracked: &[String]) -> Vec<TrackedDeviceInfo> {
+    tracked
+        .iter()
+        .map(|key| {
+            let attached = devices
+                .iter()
+                .find(|d| &d.key().to_lowercase() == key);
+            TrackedDeviceInfo {
+                name: attached
+                    .map(|d| d.description.clone())
+                    .unwrap_or_else(|| key.clone()),
+                present: attached.is_some(),
+            }
+        })
+        .collect()
+}
+
+/// Number of tracked keys that have an attached device.
+fn count_present(devices: &[UsbDevice], tracked: &[String]) -> usize {
+    tracked_device_list(devices, tracked)
+        .iter()
+        .filter(|d| d.present)
+        .count()
 }
 
 /// The unified switch routine (C# `SwitchInputAsync`).
@@ -266,6 +308,13 @@ fn evaluate_state(
         .map(|k| k.to_lowercase())
         .collect();
 
+    // Always report the tracked-device list, even on the early-return
+    // paths below, so the UI badge stays current.
+    notify(
+        ui_tx,
+        UiEvent::TrackedDevices(tracked_device_list(devices, &tracked)),
+    );
+
     if tracked.is_empty() {
         set_status(ui_tx, "No tracked devices configured. Open settings to select USB devices.");
         return;
@@ -287,9 +336,7 @@ fn evaluate_state(
     }
     drop(cfg);
 
-    let any_present = devices
-        .iter()
-        .any(|d| tracked.contains(&d.key().to_lowercase()));
+    let any_present = count_present(devices, &tracked) > 0;
 
     if state.within_cooldown() {
         log::debug!(

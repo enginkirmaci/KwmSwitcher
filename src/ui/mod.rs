@@ -18,7 +18,7 @@ pub use settings_window::SettingsWindowView;
 
 use crate::config::{AppConfig, SharedConfig};
 use crate::ddc::Ddc;
-use crate::engine::{self, EngineHandle, UiEvent};
+use crate::engine::{self, EngineHandle, TrackedDeviceInfo, UiEvent};
 use crate::input_source as isrc;
 use crate::tray::{self, TrayHandle, UiCommand};
 
@@ -41,12 +41,16 @@ pub struct Bridge {
 impl Global for Bridge {}
 
 /// Live UI state mirrored from the engine.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UiState {
     pub status: String,
     pub local_active: bool,
     pub pip_mode: u8,
     pub pip_query_failed: bool,
+    /// Tracked USB devices currently attached.
+    pub tracked_present: usize,
+    /// Every tracked device with its attach state, for the hover list.
+    pub tracked_devices: Vec<TrackedDeviceInfo>,
 }
 
 impl Default for UiState {
@@ -56,6 +60,8 @@ impl Default for UiState {
             local_active: false,
             pip_mode: isrc::PIP_OFF,
             pip_query_failed: false,
+            tracked_present: 0,
+            tracked_devices: Vec::new(),
         }
     }
 }
@@ -170,6 +176,10 @@ pub(crate) fn request_open_settings(cx: &mut App) {
 /// Drains engine events + tray commands onto the UI thread.
 fn start_event_pump(cx: &mut App) {
     cx.spawn(async move |cx| {
+        // Propagation is guarded by this: cx.notify() re-renders the window
+        // and a ksni update re-flattens the whole tray menu, both far too
+        // costly to repeat at a 60 ms tick when nothing has changed.
+        let mut last_seen: Option<UiState> = None;
         loop {
             cx.background_executor()
                 .timer(Duration::from_millis(60))
@@ -190,11 +200,17 @@ fn start_event_pump(cx: &mut App) {
                                 bridge.state.pip_mode = mode;
                                 bridge.state.pip_query_failed = query_failed;
                             }
+                            UiEvent::TrackedDevices(devices) => {
+                                bridge.state.tracked_devices = devices.clone();
+                                bridge.state.tracked_present =
+                                    devices.iter().filter(|d| d.present).count();
+                            }
                         }
                     }
                 }
 
-                // 2. Snapshot and propagate to the view + tray.
+                // 2. Snapshot and propagate to the view + tray, but only when
+                // the state actually changed.
                 let (state, tray, main_view) = {
                     let bridge = cx.global::<Bridge>();
                     (
@@ -203,19 +219,23 @@ fn start_event_pump(cx: &mut App) {
                         bridge.main_view.clone(),
                     )
                 };
-                if let Some(view) = main_view.and_then(|v| v.upgrade()) {
-                    let _ = view.update(cx, |view, cx| {
-                        view.sync_state(&state);
-                        cx.notify();
-                    });
-                }
-                if let Some(tray) = tray {
-                    tray.update_state(|t| {
-                        t.status = state.status.clone();
-                        t.local_active = state.local_active;
-                        t.pip_active = state.is_pip_active();
-                        t.pip_label = isrc::pip_mode_name(state.pip_mode);
-                    });
+                if last_seen.as_ref() != Some(&state) {
+                    if let Some(view) = main_view.and_then(|v| v.upgrade()) {
+                        let _ = view.update(cx, |view, cx| {
+                            view.sync_state(&state);
+                            cx.notify();
+                        });
+                    }
+                    if let Some(tray) = tray {
+                        tray.update_state(|t| {
+                            t.status = state.status.clone();
+                            t.local_active = state.local_active;
+                            t.has_tracked = !state.tracked_devices.is_empty();
+                            t.pip_active = state.is_pip_active();
+                            t.pip_label = isrc::pip_mode_name(state.pip_mode);
+                        });
+                    }
+                    last_seen = Some(state);
                 }
 
                 // 3. Drain tray commands (they may open windows).
@@ -255,17 +275,8 @@ fn start_event_pump(cx: &mut App) {
     .detach();
 }
 
-/// `ddcutil detect` is slow; run it on the thread pool, then open settings.
-fn spawn_settings_prefetch(cx: &mut App, ddc: Arc<Ddc>, config: SharedConfig) {
-    cx.spawn(async move |cx| {
-        let monitors = cx
-            .background_executor()
-            .spawn(async move { ddc.available_monitors() })
-            .await;
-        let _ = cx.update(|cx| open_settings_window(cx, monitors, config));
-    })
-    .detach();
-}
+/// `ddcutil detect` is slow; the monitor list is prefetched on the thread
+/// pool inside [`request_open_settings`] before the modal opens.
 
 /// Opens (or activates) the main window.
 pub fn open_main_window(cx: &mut App) {
@@ -283,10 +294,10 @@ pub fn open_main_window(cx: &mut App) {
     };
     let logo = logo_rgba();
 
-    let bounds = WindowBounds::Windowed(Bounds::centered(None, size(px(600.), px(480.)), cx));
+    let bounds = WindowBounds::Windowed(Bounds::centered(None, size(px(820.), px(460.)), cx));
     let options = WindowOptions {
         window_bounds: Some(bounds),
-        window_min_size: Some(size(px(540.), px(430.))),
+        window_min_size: Some(size(px(740.), px(420.))),
         app_id: Some("kwmswitcher".into()),
         icon: logo,
         titlebar: Some(TitlebarOptions {
@@ -312,6 +323,18 @@ pub fn open_main_window(cx: &mut App) {
     bridge.main_view = view_slot;
 }
 
+/// `ddcutil detect` is slow; run it on the thread pool, then open settings.
+fn spawn_settings_prefetch(cx: &mut App, ddc: Arc<Ddc>, config: SharedConfig) {
+    cx.spawn(async move |cx| {
+        let monitors = cx
+            .background_executor()
+            .spawn(async move { ddc.available_monitors() })
+            .await;
+        let _ = cx.update(|cx| open_settings_window(cx, monitors, config));
+    })
+    .detach();
+}
+
 /// Opens the settings window (single instance). `monitors` comes from the
 /// background `ddcutil detect` prefetch.
 pub fn open_settings_window(cx: &mut App, monitors: Vec<String>, config: SharedConfig) {
@@ -323,14 +346,17 @@ pub fn open_settings_window(cx: &mut App, monitors: Vec<String>, config: SharedC
     }
 
     let ddc = cx.global::<Bridge>().ddc.clone();
-    let bounds = WindowBounds::Windowed(Bounds::centered(None, size(px(720.), px(680.)), cx));
+    let bounds = WindowBounds::Windowed(Bounds::centered(None, size(px(720.), px(640.)), cx));
     let options = WindowOptions {
         window_bounds: Some(bounds),
-        is_resizable: false,
+        window_min_size: Some(size(px(640.), px(520.))),
         app_id: Some("kwmswitcher".into()),
         icon: logo_rgba(),
         titlebar: Some(TitlebarOptions {
-            title: Some("KWM Switcher — Settings".into()),
+            // Must stay exactly "KWM Switcher": the session's Hyprland float
+            // rule matches this title, otherwise the settings window gets
+            // tiled to screen size.
+            title: Some("KWM Switcher".into()),
             ..TitleBar::title_bar_options()
         }),
         ..TitleBar::window_options()
