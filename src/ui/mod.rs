@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use gpui_kit::component::theme::{Colorize, Theme};
-use gpui_kit::component::{Root, TitleBar};
+use gpui_kit::component::{Icon, Root, Sizable, TitleBar};
 use gpui_kit::*;
 
 pub use main_window::MainWindowView;
@@ -129,6 +129,60 @@ pub fn run() {
                 open_main_window(cx);
             }
         });
+}
+
+/// The display-path blue used for the Local/Monitor icons and the REMOTE
+/// state, matching the mockup (the theme's `info` skews teal on this palette).
+pub(crate) fn display_blue() -> Hsla {
+    gpui::rgb(0x3B82F6).into()
+}
+
+/// A title-bar control button (minimize / maximize / close) in the native
+/// Linux style: a small circular hit target centered in the bar, tinted on
+/// hover (red fill for close) with a darker pressed state. The toolkit's own
+/// controls only render under client-side decorations, so windows draw these
+/// themselves for server-side sessions.
+pub(crate) fn window_control(
+    id: &'static str,
+    icon: gpui_kit::assets::IconName,
+    is_close: bool,
+    theme: &Theme,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Div {
+    let (hover_bg, hover_fg, active_bg) = if is_close {
+        (
+            theme.danger,
+            theme.danger_foreground,
+            theme.danger_active,
+        )
+    } else {
+        (
+            theme.secondary_hover,
+            theme.secondary_foreground,
+            theme.secondary_active,
+        )
+    };
+    div()
+        .w(px(44.))
+        .h_full()
+        .flex_shrink_0()
+        .justify_center()
+        .items_center()
+        .child(
+            div()
+                .id(id)
+                .flex()
+                .w(px(28.))
+                .h(px(28.))
+                .rounded_full()
+                .justify_center()
+                .items_center()
+                .text_color(theme.foreground)
+                .hover(move |s| s.bg(hover_bg).text_color(hover_fg))
+                .active(move |s| s.bg(active_bg).text_color(hover_fg))
+                .on_click(on_click)
+                .child(Icon::new(icon).small()),
+        )
 }
 
 /// Follow the system light/dark setting, then apply our accent + radius.
@@ -346,10 +400,10 @@ pub fn open_settings_window(cx: &mut App, monitors: Vec<String>, config: SharedC
     }
 
     let ddc = cx.global::<Bridge>().ddc.clone();
-    let bounds = WindowBounds::Windowed(Bounds::centered(None, size(px(720.), px(640.)), cx));
+    let bounds = WindowBounds::Windowed(Bounds::centered(None, size(px(820.), px(620.)), cx));
     let options = WindowOptions {
         window_bounds: Some(bounds),
-        window_min_size: Some(size(px(640.), px(520.))),
+        window_min_size: Some(size(px(780.), px(560.))),
         app_id: Some("kwmswitcher".into()),
         icon: logo_rgba(),
         titlebar: Some(TitlebarOptions {

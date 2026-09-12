@@ -13,7 +13,7 @@ use gpui_kit::component::{h_flex, v_flex, ActiveTheme, Icon, Sizable, TitleBar};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::ui::UiState;
+use crate::ui::{display_blue, UiState};
 use crate::input_source as isrc;
 
 pub struct MainWindowView {
@@ -105,7 +105,7 @@ impl MainWindowView {
                     .child(Self::settings_button())
                     .when(!own_controls, |bar| bar.pr_2())
                     .when(own_controls, |bar| {
-                        bar.child(Self::window_control(
+                        bar.child(crate::ui::window_control(
                             "close",
                             IconName::WindowClose,
                             true,
@@ -128,54 +128,6 @@ impl MainWindowView {
             .on_click(|_, _, cx| {
                 crate::ui::request_open_settings(cx);
             })
-    }
-
-    /// A title-bar control button (minimize / maximize / close) in the
-    /// native Linux style: a small circular hit target centered in the bar,
-    /// tinted on hover (red fill for close) with a darker pressed state.
-    /// The toolkit's own controls only render under client-side
-    /// decorations, so these replace them for server-side sessions.
-    fn window_control(
-        id: &'static str,
-        icon: IconName,
-        is_close: bool,
-        theme: &Theme,
-        on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    ) -> Div {
-        let (hover_bg, hover_fg, active_bg) = if is_close {
-            (
-                theme.danger,
-                theme.danger_foreground,
-                theme.danger_active,
-            )
-        } else {
-            (
-                theme.secondary_hover,
-                theme.secondary_foreground,
-                theme.secondary_active,
-            )
-        };
-        div()
-            .w(px(44.))
-            .h_full()
-            .flex_shrink_0()
-            .justify_center()
-            .items_center()
-            .child(
-                div()
-                    .id(id)
-                    .flex()
-                    .w(px(28.))
-                    .h(px(28.))
-                    .rounded_full()
-                    .justify_center()
-                    .items_center()
-                    .text_color(theme.foreground)
-                    .hover(move |s| s.bg(hover_bg).text_color(hover_fg))
-                    .active(move |s| s.bg(active_bg).text_color(hover_fg))
-                    .on_click(on_click)
-                    .child(Icon::new(icon).small()),
-            )
     }
 
     /// Local — Monitor — Remote cards; the active side gets the accent
@@ -469,12 +421,6 @@ impl MainWindowView {
                     })),
             )
     }
-}
-
-/// The display-path blue used for the Local/Monitor icons and the REMOTE
-/// state, matching the mockup (the theme's `info` skews teal on this palette).
-fn display_blue() -> Hsla {
-    gpui::rgb(0x3B82F6).into()
 }
 
 struct CardSpec {
