@@ -33,13 +33,25 @@ pub struct TrayState {
     pub pip_label: String,
 }
 
+/// One RGBA variant per connection side; `icon_pixmap` picks by state.
+struct TrayIcons {
+    /// Brand logo, shown before the first switch (side unknown).
+    unknown: Vec<u8>,
+    local: Vec<u8>,
+    remote: Vec<u8>,
+    size: u32,
+}
+
 struct KwmTray {
     engine_tx: Sender<EngineCommand>,
     ui_tx: Sender<UiCommand>,
     state: Arc<Mutex<TrayState>>,
-    icon_rgba: Vec<u8>,
-    icon_size: u32,
+    icons: TrayIcons,
 }
+
+/// Local = white, remote = green (readable on dark panels).
+const LOCAL_TINT: [u8; 3] = [0xF9, 0xFA, 0xFB];
+const REMOTE_TINT: [u8; 3] = [0x22, 0xC5, 0x5E];
 
 fn menu_item(
     label: &str,
@@ -79,17 +91,23 @@ impl Tray for KwmTray {
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
+        let state = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+        let icon_rgba = match state.has_tracked {
+            true if state.local_active => &self.icons.local,
+            true => &self.icons.remote,
+            false => &self.icons.unknown,
+        };
         // ARGB32, network byte order.
-        let mut argb = Vec::with_capacity(self.icon_rgba.len());
-        for px in self.icon_rgba.chunks_exact(4) {
+        let mut argb = Vec::with_capacity(icon_rgba.len());
+        for px in icon_rgba.chunks_exact(4) {
             argb.push(px[3]); // A
             argb.push(px[0]); // R
             argb.push(px[1]); // G
             argb.push(px[2]); // B
         }
         vec![Icon {
-            width: self.icon_size as i32,
-            height: self.icon_size as i32,
+            width: self.icons.size as i32,
+            height: self.icons.size as i32,
             data: argb,
         }]
     }
@@ -99,7 +117,9 @@ impl Tray for KwmTray {
     }
 
     fn status(&self) -> Status {
-        Status::Passive
+        // Active, not Passive: some hosts (e.g. Omarchy's Quickshell shell)
+        // hide passive items entirely, which made the icon vanish.
+        Status::Active
     }
 
     /// A left click on the icon opens the main window; the context menu
@@ -183,15 +203,28 @@ impl TrayHandle {
     }
 }
 
-/// Decodes the bundled logo into RGBA and scales it to a sane tray size.
-fn load_icon_rgba() -> Option<(Vec<u8>, u32)> {
+/// Decodes the bundled logo into RGBA, scales it to a sane tray size and
+/// recolors it per connection side (alpha is kept, so the silhouette is
+/// unchanged; only the fill color differs).
+fn load_tray_icons() -> Option<TrayIcons> {
     let png = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/logo.png"));
     let img = image::load_from_memory(png).ok()?;
     let size = 64;
     let rgba = img
         .resize(size, size, image::imageops::FilterType::Lanczos3)
-        .into_rgba8();
-    Some((rgba.into_raw(), size))
+        .into_rgba8()
+        .into_raw();
+    let tinted = |rgba: &[u8], rgb: [u8; 3]| {
+        rgba.chunks_exact(4)
+            .flat_map(|px| [rgb[0], rgb[1], rgb[2], px[3]])
+            .collect()
+    };
+    Some(TrayIcons {
+        unknown: rgba.clone(),
+        local: tinted(&rgba, LOCAL_TINT),
+        remote: tinted(&rgba, REMOTE_TINT),
+        size,
+    })
 }
 
 /// Spawns the tray service. Returns `None` when DBus/SNI is unavailable —
@@ -200,11 +233,16 @@ pub fn spawn(
     engine_tx: Sender<EngineCommand>,
     ui_tx: Sender<UiCommand>,
 ) -> Option<TrayHandle> {
-    let (icon_rgba, icon_size) = match load_icon_rgba() {
-        Some(icon) => icon,
+    let icons = match load_tray_icons() {
+        Some(icons) => icons,
         None => {
             log::warn!("Failed to decode bundled logo; tray icon will be blank");
-            (Vec::new(), 64)
+            TrayIcons {
+                unknown: Vec::new(),
+                local: Vec::new(),
+                remote: Vec::new(),
+                size: 64,
+            }
         }
     };
 
@@ -220,8 +258,7 @@ pub fn spawn(
         engine_tx,
         ui_tx,
         state: state.clone(),
-        icon_rgba,
-        icon_size,
+        icons,
     };
 
     match tray.assume_sni_available(true).spawn() {
