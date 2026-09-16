@@ -137,6 +137,13 @@ pub(crate) fn display_blue() -> Hsla {
     gpui::rgb(0x3B82F6).into()
 }
 
+/// The PiP/PBP purple shared by the tray icon, the status strip tint and the
+/// Monitor card badge while a split mode is active (matches the tray's
+/// `PIP_TINT`).
+pub(crate) fn pip_purple() -> Hsla {
+    gpui::rgb(0xA855F7).into()
+}
+
 /// A title-bar control button (minimize / maximize / close) in the native
 /// Linux style: a small circular hit target centered in the bar, tinted on
 /// hover (red fill for close) with a darker pressed state. The toolkit's own

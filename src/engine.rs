@@ -131,6 +131,16 @@ fn set_status(ui_tx: &Sender<UiEvent>, status: impl Into<String>) {
     notify(ui_tx, UiEvent::Status(status.into()));
 }
 
+/// Status line shown whenever PiP/PBP is known to be active; the trailing
+/// side tracks where the devices currently are, so it moves with them.
+fn pip_status_text(state: &EngineState) -> String {
+    format!(
+        "PiP/PBP active ({}), auto-switch suspended · devices on {}",
+        isrc::pip_mode_name(state.pip_mode),
+        if state.local_active { "local" } else { "remote" },
+    )
+}
+
 fn run(
     config: SharedConfig,
     ddc: Arc<Ddc>,
@@ -143,6 +153,11 @@ fn run(
     let devices = crate::usb::list_devices();
     init_state(&config, &devices, &ui_tx);
     refresh_pip_state(&ddc, &mut state, &ui_tx);
+    // If the monitor was already in a split mode before launch, the PiP
+    // status must win over init_state's plain side status.
+    if state.is_pip_active() {
+        set_status(&ui_tx, pip_status_text(&state));
+    }
 
     loop {
         let command = match cmd_rx.recv() {
@@ -321,17 +336,20 @@ fn evaluate_state(
     }
 
     if state.is_pip_active() {
+        // Auto-switch is suspended, but the active side must still follow
+        // the devices: the tray icon/menu and the window badges read it,
+        // and freezing here left them on the pre-PiP side for the whole
+        // split-mode session.
+        let any_present = count_present(devices, &tracked) > 0;
+        if state.local_active != any_present {
+            state.local_active = any_present;
+            notify(ui_tx, UiEvent::LocalActive(any_present));
+        }
         log::debug!(
             "PiP/PBP active ({}), skipping automatic input switch",
             isrc::pip_mode_name(state.pip_mode)
         );
-        set_status(
-            ui_tx,
-            format!(
-                "PiP/PBP active ({}), auto-switch suspended",
-                isrc::pip_mode_name(state.pip_mode)
-            ),
-        );
+        set_status(ui_tx, pip_status_text(state));
         return;
     }
     drop(cfg);
@@ -423,10 +441,7 @@ fn set_pip_mode(
         set_status(
             ui_tx,
             if isrc::is_pip_active(state.pip_mode) {
-                format!(
-                    "PiP/PBP active ({}), auto-switch suspended",
-                    isrc::pip_mode_name(state.pip_mode)
-                )
+                pip_status_text(state)
             } else {
                 "PiP off, auto-switch resumed".to_string()
             },

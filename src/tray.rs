@@ -33,12 +33,14 @@ pub struct TrayState {
     pub pip_label: String,
 }
 
-/// One RGBA variant per connection side; `icon_pixmap` picks by state.
+/// One RGBA variant per state; `icon_pixmap` picks by state.
 struct TrayIcons {
     /// Brand logo, shown before the first switch (side unknown).
     unknown: Vec<u8>,
     local: Vec<u8>,
     remote: Vec<u8>,
+    /// Shown while PiP/PBP is active, overriding the side color.
+    pip: Vec<u8>,
     size: u32,
 }
 
@@ -49,9 +51,10 @@ struct KwmTray {
     icons: TrayIcons,
 }
 
-/// Local = white, remote = green (readable on dark panels).
+/// Local = white, remote = green, PiP/PBP = purple (readable on dark panels).
 const LOCAL_TINT: [u8; 3] = [0xF9, 0xFA, 0xFB];
 const REMOTE_TINT: [u8; 3] = [0x22, 0xC5, 0x5E];
+const PIP_TINT: [u8; 3] = [0xA8, 0x55, 0xF7];
 
 fn menu_item(
     label: &str,
@@ -92,10 +95,16 @@ impl Tray for KwmTray {
 
     fn icon_pixmap(&self) -> Vec<Icon> {
         let state = self.state.lock().map(|s| s.clone()).unwrap_or_default();
-        let icon_rgba = match state.has_tracked {
-            true if state.local_active => &self.icons.local,
-            true => &self.icons.remote,
-            false => &self.icons.unknown,
+        // PiP/PBP overrides the side color: purple says "split mode",
+        // regardless of which machine currently holds the devices.
+        let icon_rgba = if state.pip_active {
+            &self.icons.pip
+        } else {
+            match state.has_tracked {
+                true if state.local_active => &self.icons.local,
+                true => &self.icons.remote,
+                false => &self.icons.unknown,
+            }
         };
         // ARGB32, network byte order.
         let mut argb = Vec::with_capacity(icon_rgba.len());
@@ -223,6 +232,7 @@ fn load_tray_icons() -> Option<TrayIcons> {
         unknown: rgba.clone(),
         local: tinted(&rgba, LOCAL_TINT),
         remote: tinted(&rgba, REMOTE_TINT),
+        pip: tinted(&rgba, PIP_TINT),
         size,
     })
 }
@@ -241,6 +251,7 @@ pub fn spawn(
                 unknown: Vec::new(),
                 local: Vec::new(),
                 remote: Vec::new(),
+                pip: Vec::new(),
                 size: 64,
             }
         }

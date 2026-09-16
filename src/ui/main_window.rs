@@ -1,8 +1,9 @@
 //! The main window: a minimal header (logo and title on the left; the
 //! settings button next to the close control on the right), three device
 //! cards (Local / Monitor / Remote) with the active one highlighted —
-//! Local and Remote are clickable to switch — the status strip floating as
-//! the last element of the centered content group, and a footer bar with
+//! Local and Remote are clickable to switch, and the Monitor card wears the
+//! purple PiP badge while a split mode is active — the status strip floating
+//! as the last element of the centered content group, and a footer bar with
 //! the monitor mode actions.
 
 use gpui_kit::assets::IconName;
@@ -13,7 +14,7 @@ use gpui_kit::component::{h_flex, v_flex, ActiveTheme, Icon, Sizable, TitleBar};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::ui::{display_blue, UiState};
+use crate::ui::{display_blue, pip_purple, UiState};
 use crate::input_source as isrc;
 
 pub struct MainWindowView {
@@ -131,28 +132,35 @@ impl MainWindowView {
     }
 
     /// Local — Monitor — Remote cards; the active side gets the accent
-    /// border and the "Active" badge. Local and Remote are clickable and
-    /// switch to that side.
+    /// border and the "Active" badge, the Monitor card turns purple with a
+    /// "PiP" badge while a split mode is active. Local and Remote are
+    /// clickable and switch to that side.
     fn cards_row(&self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let local_active = self.state.local_active;
         // With nothing configured the app has never switched, so neither
         // side can claim the "Active" badge.
         let remote_active = !self.state.tracked_devices.is_empty() && !local_active;
+        let pip_active = self.state.is_pip_active();
+        let purple = pip_purple();
         let cards = [
             CardSpec {
                 name: "Local",
                 subtitle: "This machine",
                 icon: IconName::Laptop,
                 icon_color: display_blue(),
+                accent: theme.accent,
                 active: local_active,
+                badge: local_active.then_some(("Active", theme.success)),
                 action: Some(SwitchAction::Local),
             },
             CardSpec {
                 name: "Monitor",
                 subtitle: "DDC/CI target",
                 icon: IconName::Monitor,
-                icon_color: display_blue(),
-                active: false,
+                icon_color: if pip_active { purple } else { display_blue() },
+                accent: purple,
+                active: pip_active,
+                badge: pip_active.then_some(("PiP", purple)),
                 action: None,
             },
             CardSpec {
@@ -160,7 +168,9 @@ impl MainWindowView {
                 subtitle: "Other machine",
                 icon: IconName::Server,
                 icon_color: theme.muted_foreground,
+                accent: theme.accent,
                 active: remote_active,
+                badge: remote_active.then_some(("Active", theme.success)),
                 action: Some(SwitchAction::Remote),
             },
         ];
@@ -174,7 +184,7 @@ impl MainWindowView {
                     // deepen their accent tint, inactive ones lighten and
                     // gain an accent-tinted border.
                     let (hover_bg, hover_border) = if spec.active {
-                        (theme.accent.opacity(0.12), theme.accent)
+                        (spec.accent.opacity(0.12), spec.accent)
                     } else {
                         (
                             theme.secondary_hover,
@@ -206,9 +216,9 @@ impl MainWindowView {
             .gap_0()
             .rounded(theme.radius_lg)
             .border_1()
-            .border_color(if spec.active { theme.accent } else { theme.border })
+            .border_color(if spec.active { spec.accent } else { theme.border })
             .bg(if spec.active {
-                theme.accent.opacity(0.06)
+                spec.accent.opacity(0.06)
             } else {
                 theme.secondary
             })
@@ -229,7 +239,7 @@ impl MainWindowView {
                     .child(spec.subtitle),
             );
 
-        if spec.active {
+        if let Some((label, color)) = spec.badge {
             card = card.child(
                 h_flex()
                     .absolute()
@@ -240,14 +250,14 @@ impl MainWindowView {
                     .rounded_full()
                     .px_2p5()
                     .py_1()
-                    .bg(theme.success.opacity(0.12))
-                    .child(div().size(px(7.)).rounded_full().bg(theme.success))
+                    .bg(color.opacity(0.12))
+                    .child(div().size(px(7.)).rounded_full().bg(color))
                     .child(
                         div()
                             .text_size(px(12.))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(theme.success)
-                            .child("Active"),
+                            .text_color(color)
+                            .child(label),
                     ),
             );
         }
@@ -255,14 +265,17 @@ impl MainWindowView {
         card
     }
 
-    /// Status strip: a full-width container whose tint follows the active
-    /// side (green for local, blue for remote). The status text part is
-    /// left-aligned; the divider and the devices chip sit at the right edge.
+    /// Status strip: a full-width container whose tint follows the app state
+    /// (purple while PiP/PBP is active, green for local, blue for remote).
+    /// The status text part is left-aligned; the divider and the devices
+    /// chip sit at the right edge.
     fn status_strip(&self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         // Neutral grey while nothing is configured: the tint otherwise
         // claims an active side (green local / blue remote).
         let has_tracked = !self.state.tracked_devices.is_empty();
-        let tint = if !has_tracked {
+        let tint = if self.state.is_pip_active() {
+            pip_purple()
+        } else if !has_tracked {
             theme.muted_foreground
         } else if self.state.local_active {
             theme.success
@@ -428,7 +441,13 @@ struct CardSpec {
     subtitle: &'static str,
     icon: IconName,
     icon_color: Hsla,
+    /// Border/tint color used while `active`: the theme accent on the side
+    /// cards, PiP purple on the Monitor card.
+    accent: Hsla,
     active: bool,
+    /// Corner badge shown while `active`: ("Active", green) on the side
+    /// cards, ("PiP", purple) on the Monitor card.
+    badge: Option<(&'static str, Hsla)>,
     /// Set on the cards that switch sides when clicked.
     action: Option<SwitchAction>,
 }
