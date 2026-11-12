@@ -38,7 +38,8 @@ pub enum InputSwitchOutcome {
     /// The monitor reports the requested input after the write.
     Confirmed,
     /// The write succeeded, but the display does not report its input source,
-    /// so the change could not be verified; treated as success.
+    /// or the protocol's write path is deliberately not read back (LG), so the
+    /// change could not be verified; treated as success.
     Unverified,
     /// The monitor still reports a different input, even after one retry.
     Mismatch { actual: u8 },
@@ -157,11 +158,11 @@ impl Ddc {
 
     /// Switches the input and verifies what the monitor reports back.
     ///
-    /// The read-back uses the standard VCP `0x60` (see [`Ddc::read_input_locked`]).
-    /// The write is retried once when the display keeps reporting the old
-    /// input; a display that does not answer the read at all is reported as
-    /// [`InputSwitchOutcome::Unverified`], and read-back is skipped after a
-    /// few failures for the rest of the session.
+    /// Standard DDC/CI reads the result back through VCP `0x60`; the write is
+    /// retried once when the display keeps reporting the old input. LG's write
+    /// path is never read back (see `input_source::input_verification_supported`):
+    /// extra DDC traffic right after the `0xF4` write aborts the input switch,
+    /// which is why ddcutil's own verification is disabled there too.
     pub fn set_input_source(&self, logical: u8) -> InputSwitchOutcome {
         let _guard = self.lock_bus();
         let target = self.target();
@@ -176,7 +177,7 @@ impl Ddc {
         if !self.write_vcp_locked("input source", &args) {
             return InputSwitchOutcome::Failed;
         }
-        if !self.read_back_enabled() {
+        if !isrc::input_verification_supported(protocol) || !self.read_back_enabled() {
             return InputSwitchOutcome::Unverified;
         }
         // An input change is not always visible over I2C immediately.
@@ -229,6 +230,9 @@ impl Ddc {
         }
         let _guard = self.lock_bus();
         let target = self.target();
+        if !isrc::input_verification_supported(target.protocol) {
+            return None;
+        }
         let input = self.read_input_locked(target);
         self.note_read_back_result(input.is_some());
         input
@@ -291,11 +295,12 @@ impl Ddc {
         }
     }
 
-    /// Reads the input source through the **standard** VCP `0x60`, for every
-    /// protocol. LG's `0xF4` register does not echo the value that was written
-    /// (ddcutil's own write verification fails on it, which is why the LG path
-    /// uses `--noverify`), while `0x60` reports the MCCS logical code on LG
-    /// panels too. The display target still applies.
+    /// Reads the input source through the **standard** VCP `0x60`.
+    ///
+    /// Only used for the standard protocol. LG's `0xF4` register does not echo
+    /// the value that was written, and talking DDC to the display right after
+    /// that write aborts the input switch (ddcutil's own verification is
+    /// disabled for the same reason), so the LG path never reads back.
     fn read_input_locked(&self, target: Target) -> Option<u8> {
         let args = target.with_display(build_get_args(
             InputSwitchProtocol::Standard,

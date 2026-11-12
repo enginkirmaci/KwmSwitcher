@@ -116,6 +116,16 @@ pub fn pip_supported(protocol: InputSwitchProtocol) -> bool {
     protocol == InputSwitchProtocol::Lg
 }
 
+/// Whether an input write may be verified by reading VCP `0x60` afterwards.
+///
+/// Only standard DDC/CI supports this. On LG, ddcutil's own write
+/// verification is disabled (`--noverify`) because any DDC traffic right after
+/// the `0xF4` write makes the display abort the input switch; a read-back
+/// reintroduces exactly that failure, so the LG write is trusted as-is.
+pub fn input_verification_supported(protocol: InputSwitchProtocol) -> bool {
+    protocol == InputSwitchProtocol::Standard
+}
+
 /// Custom i2c source address LG needs (standard monitors use 0x00 = default).
 pub fn input_i2c_source_addr(protocol: InputSwitchProtocol) -> u8 {
     match protocol {
@@ -341,5 +351,12 @@ mod tests {
         // 0xCC is OSD Language on standard monitors, not a PiP mode.
         assert!(!pip_supported(InputSwitchProtocol::Standard));
         assert!(pip_supported(InputSwitchProtocol::Lg));
+    }
+
+    #[test]
+    fn input_verification_is_standard_only() {
+        // Reading VCP 0x60 right after the LG F4 write aborts the switch.
+        assert!(input_verification_supported(InputSwitchProtocol::Standard));
+        assert!(!input_verification_supported(InputSwitchProtocol::Lg));
     }
 }
