@@ -25,7 +25,6 @@ ksni = { version = "0.3", default-features = false, features = ["blocking", "asy
 [profile.release]
 lto = "thin"
 strip = true
-overflow-checks = true
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
