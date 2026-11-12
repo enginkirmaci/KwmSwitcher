@@ -32,6 +32,10 @@ pub fn crash_log_file() -> PathBuf {
     state_dir().join("crash.log")
 }
 
+pub fn lock_file() -> PathBuf {
+    state_dir().join("kwmswitcher.lock")
+}
+
 pub fn stderr_log_file() -> PathBuf {
     state_dir().join("stderr.log")
 }

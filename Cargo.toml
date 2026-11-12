@@ -2,6 +2,7 @@
 name = "kwmswitcher"
 version = "0.3.0"
 edition = "2021"
+rust-version = "1.88"
 description = "USB KVM switcher that flips monitor inputs over DDC/CI"
 license = "MIT"
 
@@ -24,3 +25,14 @@ ksni = { version = "0.3", default-features = false, features = ["blocking", "asy
 [profile.release]
 lto = "thin"
 strip = true
+overflow-checks = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.clippy]
+all = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+undocumented_unsafe_blocks = "warn"

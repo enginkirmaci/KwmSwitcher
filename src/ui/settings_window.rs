@@ -10,20 +10,18 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::searchable_list::{
     SearchableListDelegate, SearchableListItem, SearchableVec,
 };
+use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::theme::Theme;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme, Icon, IndexPath, Sizable, TitleBar};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use std::sync::Arc;
-
 use crate::config::{InputSwitchProtocol, SharedConfig};
-use crate::ddc::Ddc;
+use crate::engine::EngineHandle;
 use crate::input_source as isrc;
 use crate::usb;
 
@@ -107,26 +105,43 @@ fn input_options(protocol: InputSwitchProtocol) -> Vec<InputOption> {
 
 pub struct SettingsWindowView {
     config: SharedConfig,
+    engine: EngineHandle,
     devices: Vec<DeviceRow>,
     protocol: Entity<SelectState<SearchableVec<ProtocolOption>>>,
     local_input: Entity<SelectState<SearchableVec<InputOption>>>,
     remote_input: Entity<SelectState<SearchableVec<InputOption>>>,
     target_monitor: Entity<SelectState<SearchableVec<MonitorOption>>>,
+    /// Monitor list from the background `ddcutil detect`, applied on the next
+    /// render so the window opens without waiting for it.
+    pending_monitors: Option<Vec<String>>,
+    /// Whether that detection finished, and how many displays it found.
+    /// Saving before it finishes must not wipe the configured target.
+    monitors_loaded: bool,
+    monitor_count: usize,
     start_minimized: bool,
     autostart: bool,
+    /// Last save failure, shown above the footer so it is not lost in the log.
+    save_error: Option<String>,
 }
 
 impl SettingsWindowView {
     /// Called inside the window's `cx.new` with a live `Window`.
     pub fn new(
         config: SharedConfig,
-        ddc: Arc<Ddc>,
-        monitors: Vec<String>,
+        engine: EngineHandle,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let _ = &ddc;
-        let cfg = config.read().unwrap().clone();
+        // The color scheme arrives asynchronously from the XDG portal on
+        // Linux; re-sync whenever the platform reports a change, exactly like
+        // the main window does.
+        cx.observe_window_appearance(window, |_, window, cx| {
+            crate::ui::sync_theme(Some(window), cx);
+            cx.notify();
+        })
+        .detach();
+
+        let cfg = config.snapshot();
 
         let protocols = protocol_options();
         let protocol_index = protocols
@@ -144,7 +159,9 @@ impl SettingsWindowView {
 
         let local_opts = input_options(cfg.input_protocol);
         let remote_opts = local_opts.clone();
-        let local_index = local_opts.iter().position(|o| o.code == cfg.local_input_source);
+        let local_index = local_opts
+            .iter()
+            .position(|o| o.code == cfg.local_input_source);
         let remote_index = remote_opts
             .iter()
             .position(|o| o.code == cfg.remote_input_source);
@@ -165,16 +182,11 @@ impl SettingsWindowView {
             )
         });
 
-        let monitor_options: Vec<MonitorOption> =
-            monitors.into_iter().map(MonitorOption).collect();
-        let monitor_index = cfg
-            .target_monitor_name
-            .as_ref()
-            .and_then(|name| monitor_options.iter().position(|m| &m.0 == name));
         let target_monitor = cx.new(|cx| {
             SelectState::new(
-                SearchableVec::new(monitor_options),
-                monitor_index.map(IndexPath::new),
+                // Filled in by `set_monitors` once `ddcutil detect` returns.
+                SearchableVec::new(Vec::new()),
+                None,
                 window,
                 cx,
             )
@@ -196,21 +208,59 @@ impl SettingsWindowView {
         Self {
             devices: Self::collect_devices(&config),
             config,
+            engine,
             protocol,
             local_input,
             remote_input,
             target_monitor,
+            pending_monitors: None,
+            monitors_loaded: false,
+            monitor_count: 0,
             start_minimized: cfg.start_minimized,
             autostart: crate::autostart::is_enabled(),
+            save_error: None,
         }
     }
 
+    /// Hands the detected monitors to the picker; applied at render time
+    /// because `SelectState` needs a `Window`.
+    pub fn set_monitors(&mut self, monitors: Vec<String>, cx: &mut Context<Self>) {
+        self.pending_monitors = Some(monitors);
+        cx.notify();
+    }
+
+    /// Replaces the monitor options and keeps the configured target selected
+    /// when it is still present.
+    fn apply_pending_monitors(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(monitors) = self.pending_monitors.take() else {
+            return;
+        };
+        let options: Vec<MonitorOption> = monitors.into_iter().map(MonitorOption).collect();
+        self.monitors_loaded = true;
+        self.monitor_count = options.len();
+        let desired = self
+            .target_monitor
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .or_else(|| self.config.read().target_monitor_name.clone());
+        let index = desired
+            .as_ref()
+            .and_then(|name| options.iter().position(|option| &option.0 == name));
+        self.target_monitor.update(cx, |state, cx| {
+            state.set_items(SearchableVec::new(options), window, cx);
+            if let Some(index) = index {
+                state.set_selected_index(Some(IndexPath::new(index)), window, cx);
+            }
+        });
+    }
+
     fn collect_devices(config: &SharedConfig) -> Vec<DeviceRow> {
-        let tracked: Vec<String> = config.read().unwrap().tracked_device_keys.clone();
+        let tracked: Vec<String> = config.read().tracked_device_keys.clone();
         usb::list_devices()
             .into_iter()
             .map(|d| DeviceRow {
-                is_tracked: tracked.iter().any(|k| k.eq_ignore_ascii_case(&d.key())),
+                is_tracked: tracked.iter().any(|k| d.matches_key(k)),
                 key: d.key(),
                 description: d.description,
             })
@@ -225,7 +275,7 @@ impl SettingsWindowView {
         };
         let protocol = InputSwitchProtocol::from_u8(protocol);
         let (local_target, remote_target) = {
-            let cfg = self.config.read().unwrap();
+            let cfg = self.config.read();
             (
                 self.local_input
                     .read(cx)
@@ -268,6 +318,7 @@ impl SettingsWindowView {
 
 impl Render for SettingsWindowView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.apply_pending_monitors(window, cx);
         let theme = cx.theme().clone();
 
         // Same decoration handling as the main window: the toolkit's built-in
@@ -275,7 +326,7 @@ impl Render for SettingsWindowView {
         // when the session reports server-side decorations.
         let toolkit_controls = matches!(window.window_decorations(), Decorations::Client { .. });
 
-        v_flex()
+        let mut root = v_flex()
             .size_full()
             .bg(theme.background)
             .text_color(theme.foreground)
@@ -297,36 +348,41 @@ impl Render for SettingsWindowView {
                             .child(self.monitor_card(&theme, cx))
                             .child(self.startup_card(&theme, cx)),
                     ),
-            )
-            // Footer: main-window styling — right-aligned soft pill actions.
-            // Cancel discards changes and closes the window; Save persists
-            // and closes.
-            .child(
-                h_flex()
-                    .items_center()
-                    .justify_end()
-                    .gap_2()
-                    .px_8()
-                    .py_3()
-                    .border_t_1()
-                    .border_color(theme.border)
-                    .child(
-                        Button::new("cancel")
-                            .ghost()
-                            .rounded(px(9999.))
-                            .label("Cancel")
-                            .on_click(|_, window, _| window.remove_window()),
-                    )
-                    .child(
-                        Button::new("save")
-                            .primary()
-                            .rounded(px(9999.))
-                            .label("Save")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.save(window, cx);
-                            })),
-                    ),
-            )
+            );
+
+        if let Some(error) = &self.save_error {
+            root = root.child(Self::error_banner(&theme, error));
+        }
+
+        // Footer: main-window styling — right-aligned soft pill actions.
+        // Cancel discards changes and closes the window; Save persists and
+        // closes when it succeeds.
+        root.child(
+            h_flex()
+                .items_center()
+                .justify_end()
+                .gap_2()
+                .px_8()
+                .py_3()
+                .border_t_1()
+                .border_color(theme.border)
+                .child(
+                    Button::new("cancel")
+                        .ghost()
+                        .rounded(px(9999.))
+                        .label("Cancel")
+                        .on_click(|_, window, _| window.remove_window()),
+                )
+                .child(
+                    Button::new("save")
+                        .primary()
+                        .rounded(px(9999.))
+                        .label("Save")
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.save(window, cx);
+                        })),
+                ),
+        )
     }
 }
 
@@ -375,12 +431,7 @@ impl SettingsWindowView {
 
     /// A card header: small tinted icon chip + section title, mirroring the
     /// main window's card iconography at settings density.
-    fn card_header(
-        icon: IconName,
-        icon_color: Hsla,
-        title: &'static str,
-        theme: &Theme,
-    ) -> Div {
+    fn card_header(icon: IconName, icon_color: Hsla, title: &'static str, theme: &Theme) -> Div {
         h_flex()
             .items_center()
             .gap_2p5()
@@ -401,6 +452,25 @@ impl SettingsWindowView {
             )
     }
 
+    /// A red banner for a failed save, above the footer.
+    fn error_banner(theme: &Theme, message: &str) -> Div {
+        h_flex()
+            .mx_8()
+            .mb_2()
+            .items_center()
+            .gap_2()
+            .rounded(theme.radius)
+            .border_1()
+            .border_color(theme.danger.opacity(0.40))
+            .bg(theme.danger.opacity(0.10))
+            .px_3()
+            .py_2()
+            .text_color(theme.danger)
+            .text_size(px(12.))
+            .child(Icon::new(IconName::TriangleAlert).with_size(px(14.)))
+            .child(div().min_w_0().child(message.to_string()))
+    }
+
     /// Tracked USB devices — the trigger list. Scrolls internally so the
     /// card keeps a fixed footprint; the footer strip shows how many devices
     /// are tracked and holds the Refresh action.
@@ -419,8 +489,7 @@ impl SettingsWindowView {
         } else {
             self.devices
                 .iter()
-                .enumerate()
-                .map(|(i, device)| {
+                .map(|device| {
                     let key = device.key.clone();
                     let key_label = key.clone();
                     // Untracked rows dim out: the tracked set reads at a
@@ -434,14 +503,13 @@ impl SettingsWindowView {
                         .rounded(theme.radius)
                         .hover(|s| s.bg(theme.secondary_hover))
                         .child(
-                            Checkbox::new(("device", i))
+                            // Keyed by device id, not row index: the list
+                            // reorders when a device is plugged in.
+                            Checkbox::new(format!("device-{key}"))
                                 .checked(device.is_tracked)
                                 .on_change(cx.listener(move |this, checked: &bool, _, cx| {
-                                    // `key` is cloned per invocation: the
-                                    // listener may fire many times.
-                                    let key = key.clone();
                                     if let Some(row) =
-                                        this.devices.iter_mut().find(|r| r.key == key)
+                                        this.devices.iter_mut().find(|row| row.key == key)
                                     {
                                         row.is_tracked = *checked;
                                     }
@@ -550,19 +618,15 @@ impl SettingsWindowView {
             .iter()
             .map(|d| (d.key.clone(), d.is_tracked))
             .collect();
-        let tracked_cfg: Vec<String> =
-            self.config.read().unwrap().tracked_device_keys.clone();
+        let tracked_cfg: Vec<String> = self.config.read().tracked_device_keys.clone();
         self.devices = usb::list_devices()
             .into_iter()
             .map(|d| {
                 let key = d.key();
-                let is_tracked = unsaved
-                    .iter()
-                    .find(|(k, _)| *k == key)
-                    .map(|(_, tracked)| *tracked)
-                    .unwrap_or_else(|| {
-                        tracked_cfg.iter().any(|k| k.eq_ignore_ascii_case(&key))
-                    });
+                let is_tracked = unsaved.iter().find(|(k, _)| *k == key).map_or_else(
+                    || tracked_cfg.iter().any(|k| k.eq_ignore_ascii_case(&key)),
+                    |(_, tracked)| *tracked,
+                );
                 DeviceRow {
                     key,
                     description: d.description,
@@ -575,6 +639,25 @@ impl SettingsWindowView {
     /// Monitor card: input sources and protocol configure the same path, so
     /// they share a card; the target display sits below a divider.
     fn monitor_card(&self, theme: &Theme, _cx: &mut Context<Self>) -> Div {
+        // The list arrives from the background `ddcutil detect`; say what is
+        // happening instead of showing a silently empty picker.
+        let (placeholder, target_hint) = if !self.monitors_loaded {
+            (
+                "Detecting displays…",
+                "Asking ddcutil for the attached displays…",
+            )
+        } else if self.monitor_count == 0 {
+            (
+                "All monitors",
+                "No DDC/CI display answered; leaving this empty targets every display.",
+            )
+        } else {
+            (
+                "All monitors",
+                "Empty = all monitors. On laptops, pick the external display.",
+            )
+        };
+
         v_flex()
             .flex_1()
             .min_w_0()
@@ -590,15 +673,15 @@ impl SettingsWindowView {
                 "Monitor",
                 theme,
             ))
-            .child(self.select_row(
+            .child(Self::select_row(
                 "Local input (this machine)",
                 Select::new(&self.local_input).id("local-input"),
             ))
-            .child(self.select_row(
+            .child(Self::select_row(
                 "Remote input (other machine)",
                 Select::new(&self.remote_input).id("remote-input"),
             ))
-            .child(self.select_row(
+            .child(Self::select_row(
                 "Input protocol",
                 Select::new(&self.protocol).id("protocol"),
             ))
@@ -612,21 +695,18 @@ impl SettingsWindowView {
                     ),
             )
             .child(div().h(px(1.)).w_full().bg(theme.border))
-            .child(self.select_row(
+            .child(Self::select_row(
                 "Target monitor",
                 Select::new(&self.target_monitor)
                     .id("target-monitor")
-                    .placeholder("All monitors")
+                    .placeholder(placeholder)
                     .cleanable(true),
             ))
             .child(
                 div()
                     .text_size(px(12.))
                     .text_color(theme.muted_foreground)
-                    .child(
-                        "Empty = all monitors. On laptops, pick the \
-                         external display.",
-                    ),
+                    .child(target_hint),
             )
     }
 
@@ -647,7 +727,7 @@ impl SettingsWindowView {
                 "Startup",
                 theme,
             ))
-            .child(self.toggle_row(
+            .child(Self::toggle_row(
                 "start-minimized",
                 "Start minimized to tray",
                 "Show only the tray icon until the window is opened.",
@@ -658,7 +738,7 @@ impl SettingsWindowView {
                     cx.notify();
                 }),
             ))
-            .child(self.toggle_row(
+            .child(Self::toggle_row(
                 "autostart",
                 "Start automatically on login",
                 "Launch KwmSwitcher with the desktop session.",
@@ -675,7 +755,7 @@ impl SettingsWindowView {
     /// edge of the card. The row gets an explicit `w_full` and the select a
     /// fixed-width wrapper — the select's internals are percentage-sized, so
     /// a shrink-to-fit row would otherwise collapse the label to min-content.
-    fn select_row<D>(&self, label: &'static str, select: Select<D>) -> Div
+    fn select_row<D>(label: &'static str, select: Select<D>) -> Div
     where
         D: SearchableListDelegate,
     {
@@ -683,25 +763,13 @@ impl SettingsWindowView {
             .w_full()
             .items_center()
             .gap_3()
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .text_size(px(13.))
-                    .child(label),
-            )
-            .child(
-                div()
-                    .w(px(220.))
-                    .flex_shrink_0()
-                    .child(select.small()),
-            )
+            .child(div().flex_1().min_w_0().text_size(px(13.)).child(label))
+            .child(div().w(px(220.)).flex_shrink_0().child(select.small()))
     }
 
     /// A labeled switch row: label + description on the left, switch on the
     /// right.
     fn toggle_row(
-        &self,
         id: &'static str,
         label: &'static str,
         description: &'static str,
@@ -732,14 +800,17 @@ impl SettingsWindowView {
     }
 
     /// Persists the form and closes the settings window.
+    ///
+    /// A failed write keeps the window open and shows the reason above the
+    /// footer: silently closing would look like a successful save and the
+    /// change would disappear at the next start.
     fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let protocol = self
             .protocol
             .read(cx)
             .selected_value()
             .copied()
-            .map(InputSwitchProtocol::from_u8)
-            .unwrap_or(InputSwitchProtocol::Standard);
+            .map_or(InputSwitchProtocol::Standard, InputSwitchProtocol::from_u8);
         let local = self.local_input.read(cx).selected_value().copied();
         let remote = self.remote_input.read(cx).selected_value().copied();
         let target = self.target_monitor.read(cx).selected_value().cloned();
@@ -750,24 +821,59 @@ impl SettingsWindowView {
             .map(|d| d.key.clone())
             .collect();
 
-        {
-            let mut cfg = self.config.write().unwrap();
-            cfg.input_protocol = protocol;
-            if let Some(local) = local {
-                cfg.local_input_source = local;
-            }
-            if let Some(remote) = remote {
-                cfg.remote_input_source = remote;
-            }
-            cfg.target_monitor_name = target;
-            cfg.start_minimized = self.start_minimized;
-            cfg.auto_start = self.autostart;
-            cfg.tracked_device_keys = tracked;
-            cfg.save();
+        // Apply the autostart change first (only when it actually changed, so
+        // a plain save does not rewrite the entry) and record what happened:
+        // the OS entry is the source of truth, the config field only a hint.
+        let autostart_was = crate::autostart::is_enabled();
+        let autostart_error = if self.autostart != autostart_was {
+            crate::autostart::set_enabled(self.autostart).err()
+        } else {
+            None
+        };
+        self.autostart = crate::autostart::is_enabled();
+
+        let mut next = self.config.snapshot();
+        next.input_protocol = protocol;
+        if let Some(local) = local {
+            next.local_input_source = local;
         }
-        crate::autostart::set_enabled(self.autostart);
+        if let Some(remote) = remote {
+            next.remote_input_source = remote;
+        }
+        // Only overwrite when the picker could actually express the choice: a
+        // failed `detect` (no options) must keep the saved target instead of
+        // silently widening it to every monitor.
+        if self.monitors_loaded && self.monitor_count > 0 {
+            next.target_monitor_name = target;
+        }
+        next.start_minimized = self.start_minimized;
+        next.auto_start = self.autostart;
+        next.tracked_device_keys = tracked;
+
+        if let Err(err) = next.save_to(&crate::paths::config_file()) {
+            log::error!("Failed to save settings: {err}");
+            self.save_error = Some(format!("Settings were not saved: {err}"));
+            cx.notify();
+            return;
+        }
+
+        // Publish only after the file is on disk, so the running app never
+        // diverges from what the next start will load.
+        self.config.update(|cfg| *cfg = next);
+        // Let the engine re-evaluate the tracked set immediately instead of
+        // waiting for the next USB event.
+        self.engine.config_changed();
         log::info!("Settings saved");
 
+        if let Some(err) = autostart_error {
+            self.save_error = Some(format!(
+                "Settings saved, but autostart could not be updated: {err}"
+            ));
+            cx.notify();
+            return;
+        }
+
+        self.save_error = None;
         window.remove_window();
     }
 }

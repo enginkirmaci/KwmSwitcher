@@ -31,6 +31,8 @@ pub struct TrayState {
     pub has_tracked: bool,
     pub pip_active: bool,
     pub pip_label: String,
+    /// PiP/PBP control is offered for the LG protocol only.
+    pub pip_supported: bool,
 }
 
 /// One RGBA variant per state; `icon_pixmap` picks by state.
@@ -94,7 +96,7 @@ impl Tray for KwmTray {
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        let state = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+        let state = self.snapshot();
         // PiP/PBP overrides the side color: purple says "split mode",
         // regardless of which machine currently holds the devices.
         let icon_rgba = if state.pip_active {
@@ -108,11 +110,8 @@ impl Tray for KwmTray {
         };
         // ARGB32, network byte order.
         let mut argb = Vec::with_capacity(icon_rgba.len());
-        for px in icon_rgba.chunks_exact(4) {
-            argb.push(px[3]); // A
-            argb.push(px[0]); // R
-            argb.push(px[1]); // G
-            argb.push(px[2]); // B
+        for px in icon_rgba.as_chunks::<4>().0 {
+            argb.extend_from_slice(&[px[3], px[0], px[1], px[2]]); // A, R, G, B
         }
         vec![Icon {
             width: self.icons.size as i32,
@@ -143,7 +142,7 @@ impl Tray for KwmTray {
     }
 
     fn tool_tip(&self) -> ToolTip {
-        let state = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+        let state = self.snapshot();
         ToolTip {
             icon_name: String::new(),
             icon_pixmap: Vec::new(),
@@ -153,7 +152,7 @@ impl Tray for KwmTray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
-        let state = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+        let state = self.snapshot();
         let side = match state.has_tracked {
             true if state.local_active => "Local",
             true => "Remote",
@@ -161,20 +160,49 @@ impl Tray for KwmTray {
             false => "Unknown",
         };
 
-        vec![
-            MenuItem::Standard(menu_item("Main Window", &self.engine_tx, &self.ui_tx, MenuAction::Ui(UiCommand::OpenMainWindow))),
-            MenuItem::Standard(menu_item("Settings", &self.engine_tx, &self.ui_tx, MenuAction::Ui(UiCommand::OpenSettings))),
+        let mut items = vec![
+            MenuItem::Standard(menu_item(
+                "Main Window",
+                &self.engine_tx,
+                &self.ui_tx,
+                MenuAction::Ui(UiCommand::OpenMainWindow),
+            )),
+            MenuItem::Standard(menu_item(
+                "Settings",
+                &self.engine_tx,
+                &self.ui_tx,
+                MenuAction::Ui(UiCommand::OpenSettings),
+            )),
             MenuItem::Separator,
-            MenuItem::Standard(menu_item("Switch to Local", &self.engine_tx, &self.ui_tx, MenuAction::Engine(EngineCommand::SwitchToLocal))),
-            MenuItem::Standard(menu_item("Switch to Remote", &self.engine_tx, &self.ui_tx, MenuAction::Engine(EngineCommand::SwitchToRemote))),
-            MenuItem::Standard(menu_item("Toggle PiP/PBP", &self.engine_tx, &self.ui_tx, MenuAction::Engine(EngineCommand::TogglePip))),
-            MenuItem::Separator,
-            MenuItem::Standard(StandardItem {
-                label: format!("Active: {side}"),
-                enabled: false,
-                ..Default::default()
-            }),
-            MenuItem::Standard(StandardItem {
+            MenuItem::Standard(menu_item(
+                "Switch to Local",
+                &self.engine_tx,
+                &self.ui_tx,
+                MenuAction::Engine(EngineCommand::SwitchToLocal),
+            )),
+            MenuItem::Standard(menu_item(
+                "Switch to Remote",
+                &self.engine_tx,
+                &self.ui_tx,
+                MenuAction::Engine(EngineCommand::SwitchToRemote),
+            )),
+        ];
+        if state.pip_supported {
+            items.push(MenuItem::Standard(menu_item(
+                "Toggle PiP/PBP",
+                &self.engine_tx,
+                &self.ui_tx,
+                MenuAction::Engine(EngineCommand::TogglePip),
+            )));
+        }
+        items.push(MenuItem::Separator);
+        items.push(MenuItem::Standard(StandardItem {
+            label: format!("Active: {side}"),
+            enabled: false,
+            ..Default::default()
+        }));
+        if state.pip_supported {
+            items.push(MenuItem::Standard(StandardItem {
                 label: if state.pip_active {
                     format!("PiP: {}", state.pip_label)
                 } else {
@@ -182,10 +210,16 @@ impl Tray for KwmTray {
                 },
                 enabled: false,
                 ..Default::default()
-            }),
-            MenuItem::Separator,
-            MenuItem::Standard(menu_item("Quit", &self.engine_tx, &self.ui_tx, MenuAction::Ui(UiCommand::Quit))),
-        ]
+            }));
+        }
+        items.push(MenuItem::Separator);
+        items.push(MenuItem::Standard(menu_item(
+            "Quit",
+            &self.engine_tx,
+            &self.ui_tx,
+            MenuAction::Ui(UiCommand::Quit),
+        )));
+        items
     }
 
     /// Keep running even when no SNI host (e.g. bare GNOME) is present yet;
@@ -193,6 +227,16 @@ impl Tray for KwmTray {
     fn watcher_offline(&self, _reason: ksni::OfflineReason) -> bool {
         log::warn!("No StatusNotifierItem host available; tray icon not shown yet");
         true
+    }
+}
+
+impl KwmTray {
+    /// A copy of the tray state for this render; a poisoned lock (only
+    /// possible if a panic tore the UI down) falls back to the defaults.
+    fn snapshot(&self) -> TrayState {
+        self.state
+            .lock()
+            .map_or_else(|_| TrayState::default(), |state| state.clone())
     }
 }
 
@@ -224,9 +268,11 @@ fn load_tray_icons() -> Option<TrayIcons> {
         .into_rgba8()
         .into_raw();
     let tinted = |rgba: &[u8], rgb: [u8; 3]| {
-        rgba.chunks_exact(4)
-            .flat_map(|px| [rgb[0], rgb[1], rgb[2], px[3]])
-            .collect()
+        let mut tinted = Vec::with_capacity(rgba.len());
+        for px in rgba.as_chunks::<4>().0 {
+            tinted.extend_from_slice(&[rgb[0], rgb[1], rgb[2], px[3]]);
+        }
+        tinted
     };
     Some(TrayIcons {
         unknown: rgba.clone(),
@@ -239,21 +285,17 @@ fn load_tray_icons() -> Option<TrayIcons> {
 
 /// Spawns the tray service. Returns `None` when DBus/SNI is unavailable —
 /// the app keeps running without a tray.
-pub fn spawn(
-    engine_tx: Sender<EngineCommand>,
-    ui_tx: Sender<UiCommand>,
-) -> Option<TrayHandle> {
-    let icons = match load_tray_icons() {
-        Some(icons) => icons,
-        None => {
-            log::warn!("Failed to decode bundled logo; tray icon will be blank");
-            TrayIcons {
-                unknown: Vec::new(),
-                local: Vec::new(),
-                remote: Vec::new(),
-                pip: Vec::new(),
-                size: 64,
-            }
+pub fn spawn(engine_tx: Sender<EngineCommand>, ui_tx: Sender<UiCommand>) -> Option<TrayHandle> {
+    let icons = if let Some(icons) = load_tray_icons() {
+        icons
+    } else {
+        log::warn!("Failed to decode bundled logo; tray icon will be blank");
+        TrayIcons {
+            unknown: Vec::new(),
+            local: Vec::new(),
+            remote: Vec::new(),
+            pip: Vec::new(),
+            size: 64,
         }
     };
 
@@ -263,6 +305,7 @@ pub fn spawn(
         has_tracked: false,
         pip_active: false,
         pip_label: "PiP".into(),
+        pip_supported: false,
     }));
 
     let tray = KwmTray {
@@ -294,12 +337,15 @@ pub fn install_icon() {
         .join("64x64")
         .join("apps")
         .join("kwmswitcher.png");
-    if icon_path.exists() {
+    let png = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/logo.png"));
+    // Rewrite a missing or outdated icon (the logo changes between builds).
+    if std::fs::read(&icon_path).is_ok_and(|installed| installed == png) {
         return;
     }
-    let png = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/logo.png"));
     if let Some(parent) = icon_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&icon_path, png);
+    if let Err(err) = std::fs::write(&icon_path, png) {
+        log::warn!("Failed to install tray icon: {err}");
+    }
 }

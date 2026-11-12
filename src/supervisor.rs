@@ -6,6 +6,7 @@
 //! - other = crash → relaunch with exponential backoff, give up after a
 //!   crash loop
 
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -31,7 +32,7 @@ impl StopFlag {
 }
 
 /// Strips `--supervise` so the child doesn't recurse into supervising.
-fn strip_supervise_flag<'a>(args: &[String]) -> Vec<String> {
+fn strip_supervise_flag(args: &[String]) -> Vec<String> {
     args.iter()
         .filter(|a| a.as_str() != "--supervise")
         .cloned()
@@ -43,10 +44,12 @@ pub fn run(args: &[String]) -> i32 {
     crate::logging::init(paths::supervisor_log_file(), log::LevelFilter::Info);
 
     let child_args = strip_supervise_flag(args);
-    log::info!(
-        "KwmSwitcher supervisor starting; child args: {}",
-        if child_args.is_empty() { "(none)".into() } else { child_args.join(" ") }
-    );
+    let args_display = if child_args.is_empty() {
+        "(none)".to_string()
+    } else {
+        child_args.join(" ")
+    };
+    log::info!("KwmSwitcher supervisor starting; child args: {args_display}");
 
     let stop = StopFlag(Arc::new(AtomicBool::new(false)));
     for signal in [SIGTERM, SIGINT, SIGHUP] {
@@ -56,15 +59,11 @@ pub fn run(args: &[String]) -> i32 {
         }
     }
 
-    let candidate = std::env::var("KWMSWITCHER_SUPERVISE_CHILD")
-        .ok()
-        .filter(|p| !p.is_empty())
-        .or_else(|| {
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.to_str().map(str::to_string))
-        });
-    let Some(child_path) = candidate.filter(|p| std::path::Path::new(p).exists()) else {
+    let candidate: Option<PathBuf> = std::env::var_os("KWMSWITCHER_SUPERVISE_CHILD")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_exe().ok());
+    let Some(child_path) = candidate.filter(|path| path.exists()) else {
         log::error!("Cannot determine executable path to relaunch; giving up.");
         return 1;
     };
@@ -122,11 +121,14 @@ pub fn run(args: &[String]) -> i32 {
     0
 }
 
-fn spawn_and_wait(child_path: &str, child_args: &[String], stop: &StopFlag) -> i32 {
+fn spawn_and_wait(child_path: &Path, child_args: &[String], stop: &StopFlag) -> i32 {
     let mut child: Child = match Command::new(child_path).args(child_args).spawn() {
         Ok(child) => child,
         Err(err) => {
-            log::error!("Failed to spawn {child_path}: {err}; treating as crash.");
+            log::error!(
+                "Failed to spawn {}: {err}; treating as crash.",
+                child_path.display()
+            );
             return -1;
         }
     };

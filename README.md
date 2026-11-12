@@ -15,9 +15,10 @@ Rewritten from the original C#/Avalonia version in **Rust** with
 - **Automatic input switching** — polls `/sys/bus/usb/devices`, diffs the
   device set, and switches the monitor input when a tracked device appears or
   disappears (3 s switch cooldown prevents flapping).
-- **PiP / PBP awareness** — reads the monitor's PiP mode; auto-switching is
-  suspended while PiP/PBP is active, and the main window / tray menu can
-  toggle it.
+- **PiP / PBP awareness (LG)** — reads the monitor's PiP mode over LG's
+  vendor register; auto-switching is suspended while PiP/PBP is active, and
+  the main window / tray menu can toggle it. Standard DDC/CI has no PiP VCP
+  code (`0xCC` is OSD language), so this is only offered for the LG protocol.
 - **Standard DDC/CI and LG protocols** — supports both the standard input
   VCP code (0x60) and LG's vendor-specific registers (0xF4 with custom i2c
   source addresses).
@@ -41,7 +42,8 @@ monitor and startup options.
 
 ## Build
 
-Rust 1.85+ (edition 2024 dependencies) and the usual GPUI Linux build deps
+Rust 1.88+ (pinned in `Cargo.toml`; the GPUI dependencies use edition 2024) and
+the usual GPUI Linux build deps
 (Wayland/X11 client libraries, fontconfig; a Vulkan or GL capable GPU to run).
 
 ```sh
@@ -102,6 +104,8 @@ backtraces show up in the debug console.
 
 ## Notes
 
+- Only one instance runs at a time: the second launch exits immediately (the
+  lock lives in `~/.local/state/KwmSwitcher/kwmswitcher.lock`).
 - The Rust rewrite is Linux-only (the C# version also supported Windows via
   WMI; that path was not ported — the `main` branch preserves it).
 - Icons are from [Lucide](https://lucide.dev) (ISC), bundled in `assets/`.

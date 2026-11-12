@@ -11,12 +11,13 @@ mod config;
 mod ddc;
 mod engine;
 mod input_source;
+mod instance;
 mod logging;
 mod paths;
 mod supervisor;
 mod tray;
-mod usb;
 mod ui;
+mod usb;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +48,12 @@ fn main() {
     }
 
     log::debug!("Starting KwmSwitcher application");
+    if !instance::acquire() {
+        // Exit 0 so a supervising parent does not treat the duplicate as a
+        // crash and relaunch it.
+        log::info!("Another KwmSwitcher instance is already running; exiting");
+        return;
+    }
     ui::run();
 }
 
@@ -74,11 +81,10 @@ fn trigger_crash(mode: &str) {
         loop {
             std::thread::park();
         }
-    } else {
-        // Simulate an unrecoverable native fault the way a wedged i2c bus
-        // would: immediate abort, bypassing unwind and exit handlers.
-        std::process::abort();
     }
+    // Simulate an unrecoverable native fault the way a wedged i2c bus
+    // would: immediate abort, bypassing unwind and exit handlers.
+    std::process::abort();
 }
 
 /// Panics anywhere tear the process down with a non-zero exit so the
@@ -89,7 +95,11 @@ fn install_panic_hook() {
     std::panic::set_hook(Box::new(move |info| {
         default_hook(info);
         let message = format!("Panic: {info}");
-        log::error!("{message}");
+        // Deliberately not `log::error!`: the panic may have fired while the
+        // logger's mutex was held, and re-locking it from the hook would hang
+        // the process instead of exiting. `append_crash_log` opens its own
+        // handle and never touches the logger.
+        eprintln!("{message}");
         logging::append_crash_log(&paths::crash_log_file(), &message);
         std::process::exit(1);
     }));

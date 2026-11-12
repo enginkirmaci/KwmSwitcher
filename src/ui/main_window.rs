@@ -14,8 +14,8 @@ use gpui_kit::component::{h_flex, v_flex, ActiveTheme, Icon, Sizable, TitleBar};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::ui::{display_blue, pip_purple, UiState};
 use crate::input_source as isrc;
+use crate::ui::{display_blue, pip_purple, UiState};
 
 pub struct MainWindowView {
     engine: crate::engine::EngineHandle,
@@ -57,7 +57,7 @@ impl Render for MainWindowView {
             .size_full()
             .bg(theme.background)
             .text_color(theme.foreground)
-            .child(self.header(&theme, !toolkit_controls))
+            .child(Self::header(&theme, !toolkit_controls))
             .child(
                 v_flex()
                     .flex_1()
@@ -77,7 +77,7 @@ impl Render for MainWindowView {
 impl MainWindowView {
     /// Minimal header: logo and title left-aligned in the left section;
     /// the settings button next to the close control at the far right.
-    fn header(&self, theme: &Theme, own_controls: bool) -> TitleBar {
+    fn header(theme: &Theme, own_controls: bool) -> TitleBar {
         TitleBar::new()
             .h(px(44.))
             .bg(theme.background)
@@ -186,10 +186,7 @@ impl MainWindowView {
                     let (hover_bg, hover_border) = if spec.active {
                         (spec.accent.opacity(0.12), spec.accent)
                     } else {
-                        (
-                            theme.secondary_hover,
-                            theme.muted_foreground.opacity(0.4),
-                        )
+                        (theme.secondary_hover, theme.muted_foreground.opacity(0.4))
                     };
                     row = row.child(
                         card.id(spec.name)
@@ -216,14 +213,22 @@ impl MainWindowView {
             .gap_0()
             .rounded(theme.radius_lg)
             .border_1()
-            .border_color(if spec.active { spec.accent } else { theme.border })
+            .border_color(if spec.active {
+                spec.accent
+            } else {
+                theme.border
+            })
             .bg(if spec.active {
                 spec.accent.opacity(0.06)
             } else {
                 theme.secondary
             })
             .p_5()
-            .child(Icon::new(spec.icon).with_size(px(42.)).text_color(spec.icon_color))
+            .child(
+                Icon::new(spec.icon)
+                    .with_size(px(42.))
+                    .text_color(spec.icon_color),
+            )
             .child(
                 div()
                     .mt_4()
@@ -335,58 +340,63 @@ impl MainWindowView {
         // device, green dot when attached, grey when absent.
         let hover_devices = self.state.tracked_devices.clone();
         container = container.child(
-            div().id("strip-devices").flex_shrink_0().tooltip(move |window, cx| {
-                let devices = hover_devices.clone();
-                Tooltip::element(move |_, cx| {
-                    let theme = cx.theme().clone();
-                    let mut list = v_flex().gap_1p5();
-                    if devices.is_empty() {
-                        list = list.child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(theme.muted_foreground)
-                                .child("No tracked devices configured."),
-                        );
-                    }
-                    for device in &devices {
-                        let dot = if device.present {
-                            theme.success
-                        } else {
-                            theme.border
-                        };
-                        list = list.child(
-                            h_flex()
-                                .items_center()
-                                .gap_1p5()
-                                .child(div().size(px(6.)).rounded_full().bg(dot))
-                                .child(
-                                    div()
-                                        .text_size(px(12.))
-                                        .text_color(if device.present {
-                                            theme.foreground
-                                        } else {
-                                            theme.muted_foreground
-                                        })
-                                        .child(device.name.clone()),
-                                ),
-                        );
-                    }
-                    list
+            div()
+                .id("strip-devices")
+                .flex_shrink_0()
+                .tooltip(move |window, cx| {
+                    let devices = hover_devices.clone();
+                    Tooltip::element(move |_, cx| {
+                        let theme = cx.theme().clone();
+                        let mut list = v_flex().gap_1p5();
+                        if devices.is_empty() {
+                            list = list.child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(theme.muted_foreground)
+                                    .child("No tracked devices configured."),
+                            );
+                        }
+                        for device in &devices {
+                            let dot = if device.present {
+                                theme.success
+                            } else {
+                                theme.border
+                            };
+                            list = list.child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_1p5()
+                                    .child(div().size(px(6.)).rounded_full().bg(dot))
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .text_color(if device.present {
+                                                theme.foreground
+                                            } else {
+                                                theme.muted_foreground
+                                            })
+                                            .child(device.name.clone()),
+                                    ),
+                            );
+                        }
+                        list
+                    })
+                    .build(window, cx)
                 })
-                .build(window, cx)
-            })
-            .child(
-                Button::new("strip-devices")
-                    .ghost()
-                    .small()
-                    .text_color(theme.muted_foreground)
-                    .child(Icon::new(IconName::Usb).with_size(px(14.)))
-                    .child(div().text_size(px(12.)).child(devices_label))
-                    .child(Icon::new(IconName::ChevronRight).with_size(px(14.)))
-                    .on_click(|_, _, cx| {
-                        crate::ui::request_open_settings(cx);
-                    }),
-            ),
+                .child(
+                    // Distinct from the wrapper's id: two elements in one tree
+                    // sharing an id makes gpui's state lookup ambiguous.
+                    Button::new("strip-devices-button")
+                        .ghost()
+                        .small()
+                        .text_color(theme.muted_foreground)
+                        .child(Icon::new(IconName::Usb).with_size(px(14.)))
+                        .child(div().text_size(px(12.)).child(devices_label))
+                        .child(Icon::new(IconName::ChevronRight).with_size(px(14.)))
+                        .on_click(|_, _, cx| {
+                            crate::ui::request_open_settings(cx);
+                        }),
+                ),
         );
 
         container
@@ -395,20 +405,33 @@ impl MainWindowView {
     /// Footer bar: the monitor mode actions on the right. Switching happens
     /// by clicking the Local / Remote cards.
     fn footer(&self, theme: &Theme, cx: &mut Context<Self>) -> Div {
-        let pip_label = if self.state.is_pip_active() {
-            isrc::pip_mode_name(self.state.pip_mode)
-        } else {
-            "PiP / PBP".to_string()
-        };
-
-        h_flex()
+        let bar = h_flex()
             .items_center()
             .justify_end()
             .gap_2()
             .px_8()
             .py_3()
             .border_t_1()
-            .border_color(theme.border)
+            .border_color(theme.border);
+
+        // Standard DDC/CI has no PiP VCP code (0xCC is OSD language), so the
+        // controls are only offered for the LG protocol.
+        if !self.state.pip_supported {
+            return bar.child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(theme.muted_foreground)
+                    .child("PiP/PBP control requires the LG protocol"),
+            );
+        }
+
+        let pip_label = if self.state.is_pip_active() {
+            self.state.pip_mode.label()
+        } else {
+            "PiP / PBP".to_string()
+        };
+
+        bar
             // Soft, pill-shaped buttons matching the tinted cards and the
             // status pill.
             .child(
@@ -419,7 +442,7 @@ impl MainWindowView {
                     .icon(IconName::PictureInPicture2)
                     .label(pip_label)
                     .on_click(cx.listener(|this, _, _, _| {
-                        this.engine.set_pip(isrc::PIP_ON);
+                        this.engine.set_pip(isrc::PipMode::Pip);
                     })),
             )
             .child(
@@ -430,7 +453,7 @@ impl MainWindowView {
                     .icon(IconName::Columns2)
                     .label("Single")
                     .on_click(cx.listener(|this, _, _, _| {
-                        this.engine.set_pip(isrc::PIP_OFF);
+                        this.engine.set_pip(isrc::PipMode::Off);
                     })),
             )
     }
