@@ -49,9 +49,13 @@ fn main() {
 
     log::debug!("Starting KwmSwitcher application");
     if !instance::acquire() {
-        // Exit 0 so a supervising parent does not treat the duplicate as a
-        // crash and relaunch it.
-        log::info!("Another KwmSwitcher instance is already running; exiting");
+        // Another copy owns the app: ask it for its window, then exit 0 so a
+        // supervising parent does not treat the hand-off as a crash.
+        if instance::notify_running_instance() {
+            log::info!("Another KwmSwitcher instance is running; asked it to open its window");
+        } else {
+            log::info!("Another KwmSwitcher instance is already running; exiting");
+        }
         return;
     }
     ui::run();

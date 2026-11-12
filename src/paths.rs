@@ -36,6 +36,15 @@ pub fn lock_file() -> PathBuf {
     state_dir().join("kwmswitcher.lock")
 }
 
+/// Unix socket a later launch uses to ask the running instance to show its
+/// window. The runtime dir is per-session and user-private; the state dir is
+/// only a fallback for sessions without one.
+pub fn ipc_socket() -> PathBuf {
+    dirs::runtime_dir()
+        .unwrap_or_else(state_dir)
+        .join("kwmswitcher.sock")
+}
+
 pub fn stderr_log_file() -> PathBuf {
     state_dir().join("stderr.log")
 }

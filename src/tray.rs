@@ -334,7 +334,9 @@ pub fn install_icon() {
     let icon_path = dirs
         .join("icons")
         .join("hicolor")
-        .join("64x64")
+        // The bundled logo is 256x256; name the size directory honestly so
+        // the icon theme picks it for the right slots.
+        .join("256x256")
         .join("apps")
         .join("kwmswitcher.png");
     let png = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/logo.png"));

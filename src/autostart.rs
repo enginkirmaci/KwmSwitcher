@@ -49,7 +49,7 @@ fn desktop_file_content(exec_path: &str) -> String {
          Type=Application\n\
          Name=KWM Switcher\n\
          {}\n\
-         Icon=KwmSwitcher\n\
+         Icon=kwmswitcher\n\
          Comment=USB KVM switcher for monitor input\n\
          Hidden=false\n\
          NoDisplay=false\n\
@@ -259,6 +259,9 @@ mod tests {
     fn desktop_entry_uses_the_escaped_exec_line() {
         let content = desktop_file_content("/home/me/My Apps/kwmswitcher");
         assert!(content.contains("Exec=\"/home/me/My Apps/kwmswitcher\" --supervise"));
+        // Icon names are case-sensitive on Linux and `install_icon` writes
+        // `kwmswitcher.png`.
+        assert!(content.contains("Icon=kwmswitcher"));
         assert!(content.starts_with("[Desktop Entry]\n"));
     }
 

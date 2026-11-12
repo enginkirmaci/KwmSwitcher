@@ -108,6 +108,8 @@ pub fn run() {
     // Tray before the gpui event loop: spawn() makes blocking DBus calls and
     // must not stall first paint. Window opening is requested via UiCommand.
     let (ui_cmd_tx, ui_cmd_rx) = std::sync::mpsc::channel::<UiCommand>();
+    // A later launch connects here instead of starting a second engine.
+    crate::instance::start_open_listener(ui_cmd_tx.clone());
     let tray_handle = tray::spawn(engine.tx.clone(), ui_cmd_tx);
 
     gpui_kit::application()

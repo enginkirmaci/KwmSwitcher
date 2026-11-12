@@ -54,6 +54,22 @@ cargo build --release
 `ddcutil` must be installed (`pacman -S ddcutil`); the user typically needs
 write access to the i2c bus (see `ddcutil` docs / `i2c-dev` group).
 
+## Install
+
+```sh
+./scripts/install.sh
+```
+
+The script builds the release binary, installs it to `~/.local/bin`, adds the
+launcher entry (`~/.local/share/applications/kwmswitcher.desktop`) and the
+hicolor icons, then starts `kwmswitcher --supervise`. Set `PREFIX=/usr/local`
+to install elsewhere, or pass `--no-start` to install only.
+
+A second launch — from the launcher or a terminal — asks the running instance
+to open its window instead of starting a second engine. The app keeps the
+login autostart entries in sync itself (XDG autostart, plus the Omarchy
+Hyprland block when `OMARCHY_PATH` is set).
+
 ## Usage
 
 ```
