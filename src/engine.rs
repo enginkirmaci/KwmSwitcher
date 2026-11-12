@@ -56,7 +56,7 @@ const SWITCH_COOLDOWN: Duration = Duration::from_secs(3);
 const STATUS_NO_TRACKED_DEVICES: &str =
     "No tracked devices configured. Open settings to select USB devices.";
 const STATUS_LOCAL_ACTIVE: &str = "Local machine active, tracked USB devices detected";
-const STATUS_REMOTE_ACTIVE: &str = "Remote machine active, no tracked USB devices";
+const STATUS_REMOTE_ACTIVE: &str = "Remote machine active, tracked devices not detected";
 
 #[derive(Clone)]
 pub struct EngineHandle {
